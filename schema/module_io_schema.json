@@ -1,0 +1,81 @@
+{
+  "_comment": "Authoritative I/O contract for every module. Do not change without notifying the whole team. See action_plan.pdf Section 9b for full explanation of each field.",
+
+  "module1_ocr_extraction": {
+    "module": "ocr_extraction",
+    "doc_type": "passport",
+    "status": "success | partial | failed",
+    "extracted_fields": {
+      "name": {"value": "JOHN DOE", "confidence": 0.95},
+      "passport_number": {"value": "P1234567", "confidence": 0.97},
+      "nationality": {"value": "IND", "confidence": 0.92},
+      "dob": {"value": "1988-05-04", "confidence": 0.94, "_format": "ISO 8601 YYYY-MM-DD, non-negotiable"},
+      "expiry": {"value": "2030-01-15", "confidence": 0.96},
+      "gender": {"value": "M", "confidence": 0.90}
+    },
+    "mrz_raw": {
+      "line1": "P<INDDOE<<JOHN<<<<<<<<<<<<<<<<<<<<<<<<<<<<<",
+      "line2": "P1234567<4IND8805042M3001158<<<<<<<<<<<<<<08"
+    },
+    "_note": "extracted_fields keys change per doc_type per config/doc_types_config.json, but the {value, confidence} wrapper shape stays identical for every field, every doc type."
+  },
+
+  "module2_document_validation": {
+    "module": "document_validation",
+    "status": "success | failed",
+    "checksum_pass": "true | false | null (null only when mrz_format is 'none' for that doc type)",
+    "text_mrz_match": "true | false | null",
+    "expiry_valid": true,
+    "db_status": "clear | blacklisted | expired | not_found",
+    "flags": ["list of short strings, e.g. checksum_fail, expiry_passed -- empty list when clean"]
+  },
+
+  "module3_tampering_detection": {
+    "module": "tampering_detection",
+    "status": "success | failed",
+    "ela_score": "0.0-1.0, how much compression-error anomaly was found",
+    "ela_clarity": "0.0-1.0, how trustworthy/uniform the ELA reading itself is - feeds evidence-strength axis",
+    "copy_move_flag": false,
+    "exif_flag": false,
+    "exif_details": {"editing_software_detected": "null or string", "modified_after_creation": false},
+    "overall_tamper_flag": false,
+    "_note": "overall_tamper_flag is the single boolean the risk engine consumes - combining ELA/copy-move/EXIF is this module's job, not the risk engine's."
+  },
+
+  "module4_face_verification": {
+    "module": "face_verification",
+    "status": "match | mismatch | no_face_detected",
+    "similarity": "0.0-1.0, or null if status is no_face_detected",
+    "threshold_used": 0.6,
+    "face_detected_in_document": true,
+    "face_detected_in_live": true
+  },
+
+  "module5_authority_reference_match": {
+    "module": "authority_reference_match",
+    "status": "match | mismatch | not_available",
+    "similarity": "0.0-1.0, or null",
+    "reference_source": "mock_db_2",
+    "_note": "Every other module must run correctly even when this returns not_available - lets the whole pipeline work before Module 5 exists, or if it's cut entirely."
+  },
+
+  "module6_blockchain_ledger": {
+    "module": "blockchain_ledger",
+    "status": "success | failed",
+    "record_hash": "sha256 hex string",
+    "previous_hash": "sha256 hex string of prior record, or genesis value for first record",
+    "timestamp": "ISO 8601 datetime, e.g. 2026-09-01T10:15:00Z",
+    "identity_reuse_flag": false,
+    "identity_reuse_matches": ["list of prior record IDs when identity_reuse_flag is true, empty otherwise"]
+  },
+
+  "risk_scoring_engine": {
+    "risk_score": "0-100 integer",
+    "risk_band": "clear | secondary_check | high_risk",
+    "evidence_strength": "0.0-1.0",
+    "evidence_band": "high | low",
+    "final_recommendation": "clear | secondary_check | high_risk",
+    "contributing_flags": ["list of strings explaining why the score is what it is"],
+    "_note": "final_recommendation is what the dashboard displays most prominently. Dashboard should never compute this logic itself, only display it."
+  }
+}

@@ -1,0 +1,23 @@
+# Backend
+fastapi
+uvicorn[standard]
+pydantic
+
+# Module 1 - OCR
+passporteye
+paddleocr
+easyocr
+opencv-python-headless
+pillow
+
+# Module 4 / 5 - Face verification
+deepface
+face_recognition
+
+# Module 6 - Blockchain (hash chain is stdlib hashlib; below only if going the extra mile)
+# web3
+# py-solc-x
+
+# Utilities
+numpy
+python-multipart

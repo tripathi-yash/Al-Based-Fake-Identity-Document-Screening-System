@@ -1,0 +1,6 @@
+{
+  "_comment": "Download the full ISO 3166-1 alpha-3 list and populate here. Used by Module 2 for nationality field validation.",
+  "IND": "India",
+  "USA": "United States of America",
+  "GBR": "United Kingdom"
+}

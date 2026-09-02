@@ -1,0 +1,26 @@
+{
+  "_comment": "Single source of truth for every tunable value. Never hardcode a threshold inside a module file - import it from here.",
+
+  "face_verification": {
+    "match_threshold": 0.6,
+    "_note": "cosine similarity above this = match. Tune against data/fixtures/faces/ pairs on Day 5."
+  },
+
+  "tampering_detection": {
+    "ela_quality_resave": 90,
+    "ela_score_flag_threshold": 0.35,
+    "ela_clarity_low_threshold": 0.4,
+    "copy_move_match_ratio_threshold": 0.5
+  },
+
+  "risk_scoring": {
+    "risk_band_clear_max": 30,
+    "risk_band_secondary_check_max": 65,
+    "evidence_strength_low_threshold": 0.5,
+    "module_weights": {
+      "validation_fail": 0.35,
+      "tamper_score": 0.35,
+      "face_mismatch": 0.30
+    }
+  }
+}
