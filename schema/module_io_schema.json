@@ -33,13 +33,16 @@
   "module3_tampering_detection": {
     "module": "tampering_detection",
     "status": "success | failed",
-    "ela_score": "0.0-1.0, how much compression-error anomaly was found",
-    "ela_clarity": "0.0-1.0, how trustworthy/uniform the ELA reading itself is - feeds evidence-strength axis",
-    "copy_move_flag": false,
+    "dl_tamper_probability": "0.0-1.0 or null if DL model unavailable - PRIMARY signal, from pretrained ManTraNet",
+    "ela_score": "0.0-1.0, SUPPORTING signal",
+    "ela_clarity": "0.0-1.0, how trustworthy the ELA reading itself is - feeds evidence-strength axis",
+    "copy_move_flag": "boolean, SUPPORTING signal, geometrically-verified via RANSAC (not naive keypoint counting)",
     "exif_flag": false,
-    "exif_details": {"editing_software_detected": "null or string", "modified_after_creation": false},
+    "exif_details": {"editing_software_detected": "null or string", "modified_after_creation": false, "raw_software_tag": "null or string", "exif_present": true},
     "overall_tamper_flag": false,
-    "_note": "overall_tamper_flag is the single boolean the risk engine consumes - combining ELA/copy-move/EXIF is this module's job, not the risk engine's."
+    "tamper_verdict": "tampered | clean | uncertain - 'uncertain' means evidence was genuinely insufficient, this must lower evidence_strength in the risk engine, not be silently treated as clean",
+    "supporting_flags": ["list of strings, e.g. dl_model_unavailable"],
+    "_note": "overall_tamper_flag is still the single boolean the risk engine's risk axis reads. tamper_verdict additionally feeds the evidence-strength axis - see docs/module3_architecture_update.md."
   },
 
   "module4_face_verification": {

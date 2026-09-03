@@ -7,10 +7,19 @@
   },
 
   "tampering_detection": {
+    "dl_high_confidence_threshold": 0.7,
+    "dl_low_confidence_threshold": 0.3,
+    "_dl_note": "dl_probability >= high => tampered outright. <= low => clean outright. In between => borderline, consult ELA/EXIF/copy-move per tampering_detection.py fusion logic.",
+
     "ela_quality_resave": 90,
     "ela_score_flag_threshold": 0.35,
     "ela_clarity_low_threshold": 0.4,
-    "copy_move_match_ratio_threshold": 0.5
+
+    "copy_move_ratio_thresh": 0.75,
+    "copy_move_min_spatial_distance_px": 20,
+    "copy_move_ransac_reproj_thresh": 5.0,
+    "copy_move_min_inliers_to_flag": 8,
+    "_copy_move_note": "Tune min_inliers_to_flag against data/fixtures/clean/ (should stay False, even with repeated patterns like security textures) and data/fixtures/tampered/ (should flip True on genuine stamp/region duplication)."
   },
 
   "risk_scoring": {
