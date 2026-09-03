@@ -96,3 +96,20 @@ def detect_copy_move(
         "match_count": len(good_matches),
         "geometric_inliers": geometric_inliers,
     }
+
+if __name__ == "__main__":
+    import os
+
+    example_path = os.path.join(
+        os.path.dirname(__file__),
+        "mantranet_lib",
+        "Demo_images",
+        "example.png"
+    )
+
+    with open(example_path, "rb" ) as file:
+        image_bytes = file.read()
+
+    print(detect_copy_move(image_bytes=image_bytes))
+
+    
