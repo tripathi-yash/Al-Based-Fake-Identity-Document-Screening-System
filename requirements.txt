@@ -10,6 +10,16 @@ easyocr
 opencv-python-headless
 pillow
 
+# Module 3 - Tampering Detection
+# ELA/EXIF/copy-move use pillow, numpy, opencv-python-headless above (no extra installs).
+# torch/torchvision below are for the DL tamper detector (ManTraNet) - the model code
+# itself is NOT pip-installable, it's a vendored clone. See:
+# backend/modules/module3_tampering/dl_tamper_detector.py docstring for the one-time
+# `git clone` + weights-download setup steps that must be done separately after this
+# requirements.txt install.
+torch
+torchvision
+
 # Module 4 / 5 - Face verification
 deepface
 face_recognition
