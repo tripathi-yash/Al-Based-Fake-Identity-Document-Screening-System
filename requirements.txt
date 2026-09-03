@@ -19,10 +19,11 @@ pillow
 # requirements.txt install.
 torch
 torchvision
+pytorch-lightning
 
 # Module 4 / 5 - Face verification
 deepface
-face_recognition
+# face_recognition
 
 # Module 6 - Blockchain (hash chain is stdlib hashlib; below only if going the extra mile)
 # web3

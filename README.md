@@ -26,6 +26,10 @@ Fill this in on Day 1 and keep it current  it's the fastest way for anyone on th
 ```bash
 # backend
 cd backend
+
+## Requirements
+
+- use Python 3.11.9
 pip install -r ../requirements.txt
 
 # run the API

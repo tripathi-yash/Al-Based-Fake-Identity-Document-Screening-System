@@ -7,7 +7,7 @@ import pytest
 
 
 def test_stub_returns_expected_schema():
-    from modules.module3_tampering.stub import run_tampering_detection
+    from backend.modules.module3_tampering.stub import run_tampering_detection
 
     result = run_tampering_detection(b"fake_bytes")
     assert result["module"] == "tampering_detection"
