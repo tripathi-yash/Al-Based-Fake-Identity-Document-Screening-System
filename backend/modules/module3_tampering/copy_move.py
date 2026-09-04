@@ -99,6 +99,7 @@ def detect_copy_move(
 
 if __name__ == "__main__":
     import os
+    
 
     example_path = os.path.join(
         os.path.dirname(__file__),
@@ -111,5 +112,7 @@ if __name__ == "__main__":
         image_bytes = file.read()
 
     print(detect_copy_move(image_bytes=image_bytes))
+
+    
 
     

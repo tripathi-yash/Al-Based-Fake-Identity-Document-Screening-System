@@ -39,7 +39,6 @@ import numpy as np
 from PIL import Image
 import tempfile
 import torch
-import matplotlib.pyplot as plt
 
 import gc # Added for active RAM reclamation
 
@@ -134,14 +133,11 @@ def detect_tampering_dl(image_bytes: bytes) -> dict:
     del final_output
     gc.collect()
 
-
     # Aggregate to a single probability. A simple mean is a reasonable
     # starting point; consider using the 90th-percentile pixel value
     # instead once you have real fixtures, since a small tampered region
     # in an otherwise clean image should not be diluted by averaging
     # across the whole (mostly clean) image.
-    
-    dl_tamper_probability = float(np.clip(heatmap_arr.mean(), 0.0, 1.0))
 
     return {
         "dl_tamper_probability": dl_tamper_probability,
@@ -149,6 +145,7 @@ def detect_tampering_dl(image_bytes: bytes) -> dict:
     }
 
 if __name__ == "__main__":
+    import matplotlib.pyplot as plt
     import time
 
     start_time = time.perf_counter()

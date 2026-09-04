@@ -51,3 +51,21 @@ def check_exif(image_bytes: bytes) -> dict:
         "raw_software_tag": software,
         "exif_present": exif_raw is not None,
     }
+
+if __name__ == "__main__":
+    import os
+    import matplotlib.pyplot as plt
+
+    example_path = os.path.join(
+        os.path.dirname(__file__),
+        "mantranet_lib",
+        "Demo_images",
+        "example4.jpg"
+    )
+
+    with open(example_path, "rb" ) as file:
+        image_bytes = file.read()
+
+    result = check_exif(image_bytes=image_bytes)
+
+    print(result)

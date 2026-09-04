@@ -106,3 +106,22 @@ def run_tampering_detection(doc_image_bytes: bytes) -> dict:
         "tamper_verdict": tamper_verdict,
         "supporting_flags": supporting_flags,
     }
+
+if __name__ == "__main__":
+    import os
+    import matplotlib.pyplot as plt
+
+    example_path = os.path.join(
+        os.path.dirname(__file__),
+        "mantranet_lib",
+        "Demo_images",
+        "example4.jpg"
+    )
+
+    with open(example_path, "rb" ) as file:
+        image_bytes = file.read()
+
+    result = run_tampering_detection(doc_image_bytes=image_bytes)
+
+    print(result)
+

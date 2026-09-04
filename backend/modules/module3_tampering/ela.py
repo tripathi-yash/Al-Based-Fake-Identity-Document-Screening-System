@@ -56,3 +56,28 @@ def compute_ela(image_bytes: bytes, resave_quality: int = 90) -> dict:
         "ela_clarity": ela_clarity,
         "diff_image": diff_vis_image,
     }
+
+
+if __name__ == "__main__":
+    import os
+    import matplotlib.pyplot as plt
+
+    example_path = os.path.join(
+        os.path.dirname(__file__),
+        "mantranet_lib",
+        "Demo_images",
+        "example4.jpg"
+    )
+
+    with open(example_path, "rb" ) as file:
+        image_bytes = file.read()
+
+    result = compute_ela(image_bytes=image_bytes)
+
+    print(result["ela_score"])
+    print(result["ela_clarity"])
+
+    plt.imshow(result["diff_image"], vmin=0.0, vmax=1.0)
+    plt.title('diff_image')
+
+    plt.show()
