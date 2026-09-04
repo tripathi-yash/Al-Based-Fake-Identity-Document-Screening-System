@@ -4,3 +4,7 @@ clean_passport_02.jpg,passport,clean,false,no_face_detected,N2345678,self-genera
 clean_passport_03.jpg,passport,clean,false,no_face_detected,N3456789,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
 clean_passport_04.jpg,passport,clean,false,no_face_detected,N4567890,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
 clean_passport_05.jpg,passport,clean,false,no_face_detected,N5678901,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
+
+tampered_01_photo_swap.jpg,passport,tampered,true,no_face_detected,N1234567,photo placeholder region overwritten + re-saved (double compression); based on clean_passport_01
+tampered_02_dob_alter.jpg,passport,tampered,false,no_face_detected,N1234567,visible DOB changed to 1990-01-01 but MRZ still encodes 2003-08-15 -- deliberate text/MRZ mismatch for Module 2 to catch; based on clean_passport_01
+tampered_03_stamp_clone.jpg,passport,tampered,true,no_face_detected,N1234567,copy-move: surname text block duplicated and pasted lower on document; based on clean_passport_01
