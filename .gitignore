@@ -17,6 +17,11 @@ frontend/.vite/
 data/midv500_subset/*
 !data/midv500_subset/.gitkeep
 
+# Ledger runtime output (regenerated, not source)
+backend/database/ledger_data.json
+data/ledger/*.json
+!data/ledger/.gitkeep
+
 # Uploaded/runtime files
 backend/uploads/
 *.log
@@ -26,5 +31,5 @@ backend/uploads/
 .vscode/
 .idea/
 
-# Ledger runtime output (regenerated, not source)
-backend/database/ledger_data.json
+# vendored mantranet_lib repo
+backend/modules/module3_tampering/mantranet_lib/
