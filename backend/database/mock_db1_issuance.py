@@ -9,11 +9,12 @@ data/fixtures/fixtures_manifest.csv as the cross-reference.
 
 # TODO: populate with entries drawn from your MIDV-500 fixture subset
 ISSUANCE_TABLE = {
-    # "P1234567": {"status": "clear", "issued_to": "JOHN DOE"},
-    # "P7654321": {"status": "blacklisted", "issued_to": "JANE SMITH"},
-    # "P1112223": {"status": "expired", "issued_to": "ALEX KIM"},
+    "N1234567": {"status": "clear", "issued_to": "ASHRAY KUMAR SHARMA"},
+    "N2345678": {"status": "blacklisted", "issued_to": "PRIYA VERMA"},
+    "N3456789": {"status": "expired", "issued_to": "AAMIR RAZA KHAN"},
+    "N4567890": {"status": "clear", "issued_to": "LAKSHMI IYER"},
+    "N5678901": {"status": "clear", "issued_to": "ARJUN SINGH"},
 }
-
 
 def lookup_document_status(document_number: str) -> str:
     entry = ISSUANCE_TABLE.get(document_number)
