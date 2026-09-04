@@ -1,0 +1,18 @@
+{
+  "filename": "clean_passport_02.jpg",
+  "doc_type": "passport",
+  "source": "self-generated synthetic fixture (NOT from MIDV-500 dataset)",
+  "fields": {
+    "surname": "VERMA",
+    "given_names": "PRIYA",
+    "passport_number": "N2345678",
+    "nationality": "IND",
+    "date_of_birth": "1999-01-12",
+    "sex": "F",
+    "date_of_expiry": "2029-03-12"
+  },
+  "mrz": {
+    "line1": "P<INDVERMA<<PRIYA<<<<<<<<<<<<<<<<<<<<<<<<<<<",
+    "line2": "N2345678<2IND9901122F2903127<<<<<<<<<<<<<<04"
+  }
+}

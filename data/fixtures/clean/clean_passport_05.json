@@ -1,0 +1,18 @@
+{
+  "filename": "clean_passport_05.jpg",
+  "doc_type": "passport",
+  "source": "self-generated synthetic fixture (NOT from MIDV-500 dataset)",
+  "fields": {
+    "surname": "SINGH",
+    "given_names": "ARJUN",
+    "passport_number": "N5678901",
+    "nationality": "IND",
+    "date_of_birth": "2002-09-14",
+    "sex": "M",
+    "date_of_expiry": "2032-09-14"
+  },
+  "mrz": {
+    "line1": "P<INDSINGH<<ARJUN<<<<<<<<<<<<<<<<<<<<<<<<<<<",
+    "line2": "N5678901<7IND0209146M3209147<<<<<<<<<<<<<<04"
+  }
+}

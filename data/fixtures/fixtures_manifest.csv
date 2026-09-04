@@ -1,1 +1,6 @@
 filename,doc_type,category,expected_module3_result,expected_module4_result,linked_db_id,notes
+clean_passport_01.jpg,passport,clean,false,no_face_detected,N1234567,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
+clean_passport_02.jpg,passport,clean,false,no_face_detected,N2345678,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
+clean_passport_03.jpg,passport,clean,false,no_face_detected,N3456789,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
+clean_passport_04.jpg,passport,clean,false,no_face_detected,N4567890,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
+clean_passport_05.jpg,passport,clean,false,no_face_detected,N5678901,self-generated synthetic fixture; ICAO checksum-valid; no real face photo present
