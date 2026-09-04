@@ -1,0 +1,18 @@
+{
+  "filename": "clean_passport_01.jpg",
+  "doc_type": "passport",
+  "source": "self-generated synthetic fixture (NOT from MIDV-500 dataset)",
+  "fields": {
+    "surname": "SHARMA",
+    "given_names": "ASHRAY KUMAR",
+    "passport_number": "N1234567",
+    "nationality": "IND",
+    "date_of_birth": "2003-08-15",
+    "sex": "M",
+    "date_of_expiry": "2030-08-15"
+  },
+  "mrz": {
+    "line1": "P<INDSHARMA<<ASHRAY<KUMAR<<<<<<<<<<<<<<<<<<<",
+    "line2": "N1234567<7IND0308153M3008155<<<<<<<<<<<<<<06"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "filename": "tampered_02_dob_alter.jpg",
+  "doc_type": "passport",
+  "tamper_type": "dob_alter",
+  "based_on": "clean_passport_01.jpg",
+  "linked_db_id": "N1234567",
+  "what_was_changed": "Printed Date of Birth overwritten to '1990-01-01'. MRZ line (still says 2003-08-15) was NOT updated -- deliberate text/MRZ mismatch.",
+  "expected_module3_result": false,
+  "expected_module2_result": "checksum_pass=true, text_mrz_match=false -- THIS is the catch",
+  "expected_module4_result": "no_face_detected (no real face in either version)"
+}

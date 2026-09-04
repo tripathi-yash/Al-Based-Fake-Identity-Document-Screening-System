@@ -1,0 +1,11 @@
+{
+  "filename": "tampered_03_stamp_clone.jpg",
+  "doc_type": "passport",
+  "tamper_type": "stamp_clone",
+  "based_on": "clean_passport_01.jpg",
+  "linked_db_id": "N1234567",
+  "what_was_changed": "Region (270, 90, 850, 130) duplicated and pasted at (270, 420) -- simulates copy-move/cloned stamp forgery.",
+  "expected_module3_result": true,
+  "expected_module2_result": "checksum_pass=true (MRZ untouched)",
+  "expected_module4_result": "no_face_detected (no real face in either version)"
+}

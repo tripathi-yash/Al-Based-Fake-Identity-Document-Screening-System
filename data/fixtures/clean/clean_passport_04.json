@@ -1,0 +1,18 @@
+{
+  "filename": "clean_passport_04.jpg",
+  "doc_type": "passport",
+  "source": "self-generated synthetic fixture (NOT from MIDV-500 dataset)",
+  "fields": {
+    "surname": "IYER",
+    "given_names": "LAKSHMI",
+    "passport_number": "N4567890",
+    "nationality": "IND",
+    "date_of_birth": "1997-06-30",
+    "sex": "F",
+    "date_of_expiry": "2028-06-30"
+  },
+  "mrz": {
+    "line1": "P<INDIYER<<LAKSHMI<<<<<<<<<<<<<<<<<<<<<<<<<<",
+    "line2": "N4567890<2IND9706305F2806309<<<<<<<<<<<<<<00"
+  }
+}

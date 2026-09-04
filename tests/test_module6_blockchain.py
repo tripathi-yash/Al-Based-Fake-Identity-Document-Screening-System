@@ -7,7 +7,7 @@ import pytest
 
 
 def test_stub_returns_expected_schema():
-    from modules.module6_blockchain.stub import write_ledger_record
+    from backend.modules.module6_blockchain.stub import write_ledger_record
 
     result = write_ledger_record({}, {}, {}, {}, {})
     assert result["module"] == "blockchain_ledger"
@@ -16,7 +16,7 @@ def test_stub_returns_expected_schema():
 
 
 def test_hash_chain_breaks_on_tampering():
-    from modules.module6_blockchain.hash_chain import compute_record_hash, GENESIS_HASH
+    from backend.modules.module6_blockchain.hash_chain import compute_record_hash, GENESIS_HASH
 
     record1 = {"doc": "A"}
     hash1 = compute_record_hash(GENESIS_HASH, record1)
@@ -27,6 +27,22 @@ def test_hash_chain_breaks_on_tampering():
     assert hash1 != hash1_tampered  # altering the record changes its hash
 
 
-# TODO: once identity_reuse.py is implemented:
-# - test_same_face_different_name_flagged()
-# - test_same_face_same_name_not_flagged()
+def test_hash_chain_is_deterministic():
+    """Same input should always produce the same hash -- required for the
+    chain to be verifiable later (re-computing hashes must match stored ones)."""
+    from backend.modules.module6_blockchain.hash_chain import compute_record_hash, GENESIS_HASH
+
+    record = {"doc": "A"}
+    hash_a = compute_record_hash(GENESIS_HASH, record)
+    hash_b = compute_record_hash(GENESIS_HASH, record)
+    assert hash_a == hash_b
+
+
+@pytest.mark.skip(reason="identity_reuse.py does not exist yet -- Module 6b (embedding similarity search) not yet implemented. Un-skip once it lands.")
+def test_same_face_different_name_flagged():
+    pass
+
+
+@pytest.mark.skip(reason="identity_reuse.py does not exist yet -- Module 6b (embedding similarity search) not yet implemented. Un-skip once it lands.")
+def test_same_face_same_name_not_flagged():
+    pass
