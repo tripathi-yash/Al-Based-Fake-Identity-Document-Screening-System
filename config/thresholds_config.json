@@ -6,6 +6,11 @@
     "_note": "cosine similarity above this = match. Tune against data/fixtures/faces/ pairs on Day 5."
   },
 
+  "authority_reference_match": {
+    "match_threshold": 0.6,
+    "_note": "cosine similarity above this = match, same convention/model as face_verification (see backend/modules/shared/face_embedding_utils.py). Starts equal to face_verification's threshold as a placeholder - tune separately once Module 5 has real reference photos in mock_db2_authority_ref.py, since comparing doc-photo-to-authority-original may tolerate a different threshold than doc-photo-to-live-selfie."
+  },
+
   "tampering_detection": {
     "dl_high_confidence_threshold": 0.7,
     "dl_low_confidence_threshold": 0.3,
@@ -22,14 +27,24 @@
     "_copy_move_note": "Tune min_inliers_to_flag against data/fixtures/clean/ (should stay False, even with repeated patterns like security textures) and data/fixtures/tampered/ (should flip True on genuine stamp/region duplication)."
   },
 
+  "identity_reuse_detection": {
+    "similarity_threshold": 0.6,
+    "_note": "cosine similarity above this = same face flagged as reused, when paired with a DIFFERENT declared identity/doc number (see module6_blockchain/identity_reuse.py). Same convention as face_verification. Was previously hardcoded in identity_reuse.py - that file must be updated to load this value from here instead of the literal 0.6."
+  },
+
   "risk_scoring": {
-    "risk_band_clear_max": 30,
-    "risk_band_secondary_check_max": 65,
-    "evidence_strength_low_threshold": 0.5,
-    "module_weights": {
-      "validation_fail": 0.35,
-      "tamper_score": 0.35,
-      "face_mismatch": 0.30
-    }
-  }
+  "risk_band_clear_max": 30,
+  "risk_band_secondary_check_max": 65,
+  "evidence_strength_low_threshold": 0.5,
+  "module_weights": {
+    "validation_fail": 0.35,
+    "tamper_score": 0.35,
+    "face_mismatch": 0.30
+  },
+  "override_signals": {
+    "authority_reference_mismatch": "high_risk",
+    "identity_reuse_flag": "high_risk"
+  },
+  "_override_note": "These bypass module_weights entirely — if either fires, final_recommendation is forced to at least this band regardless of the weighted score, same non-diluting-veto principle as tampering_detection.py's DL-confident verdicts. authority_reference_match status='not_available' is NOT an override — it's neutral and should only lower evidence_strength, never raise risk_score."
+}
 }
