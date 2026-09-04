@@ -11,6 +11,7 @@ Owner: fill in only if/when Module 5 is built (after Modules 1-4 stable).
 # (i.e. before your team's photo-swap edits), per action_plan.pdf Section 12
 AUTHORITY_REFERENCE_TABLE = {
     # "P1234567": "data/fixtures/clean/original_midv500_photo_01.jpg",
+    "P1234567": "data/fixtures/clean/student_id.jpg",
 }
 
 
