@@ -1,14 +1,14 @@
 # Backend
-fastapi
-uvicorn[standard]
-pydantic
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+pydantic==2.13.5
 
 # Module 1 - OCR
-passporteye
-paddleocr
-easyocr
-opencv-python-headless
-pillow
+passporteye==2.2.2
+paddleocr==3.7.0
+easyocr==1.7.2
+opencv-python-headless==5.0.0.93
+pillow==12.3.0
 
 # Module 3 - Tampering Detection
 # ELA/EXIF/copy-move use pillow, numpy, opencv-python-headless above (no extra installs).
@@ -17,18 +17,34 @@ pillow
 # backend/modules/module3_tampering/dl_tamper_detector.py docstring for the one-time
 # `git clone` + weights-download setup steps that must be done separately after this
 # requirements.txt install.
-torch
-torchvision
-pytorch-lightning
+torch==2.14.0
+torchvision==0.29.0
+# pytorch-lightning - NOT currently used by anything in the ManTraNet setup docstring.
+# Installed in the working environment but unconfirmed as an actual dependency - verify
+# with whoever added it before dropping. Left commented out here; add back explicitly
+# with a version if it turns out to be required by a vendored lib.
+# pytorch-lightning==2.6.5
 
 # Module 4 / 5 - Face verification
-deepface
-# face_recognition
+tensorflow==2.21.0
+tf-keras==2.21.0
+deepface==0.0.100
+retina-face==0.0.18
+# NOTE: opencv-python and opencv-contrib-python intentionally NOT listed here.
+# opencv-python-headless (above, Module 1) already provides cv2 for the whole
+# project - installing multiple opencv variants in one environment is a known
+# source of unpredictable import conflicts. If DeepFace/RetinaFace specifically
+# require GUI bindings (opencv-python) or extra modules (opencv-contrib-python)
+# that headless doesn't provide, confirm the exact error first before adding
+# either back - don't add speculatively.
 
 # Module 6 - Blockchain (hash chain is stdlib hashlib; below only if going the extra mile)
 # web3
 # py-solc-x
 
 # Utilities
-numpy
-python-multipart
+numpy==2.3.5
+python-multipart==0.0.32
+
+# Testing
+pytest==9.1.1
