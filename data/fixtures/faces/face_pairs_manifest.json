@@ -1,0 +1,82 @@
+[
+  {
+    "category": "matched",
+    "document_file": "matched/anoop_document.jpg",
+    "selfie_file": "matched/anoop_selfie.jpg",
+    "document_identity": "anoop",
+    "selfie_identity": "anoop",
+    "expected_status": "match"
+  },
+  {
+    "category": "matched",
+    "document_file": "matched/ashray_document.jpg",
+    "selfie_file": "matched/ashray_selfie.jpg",
+    "document_identity": "ashray",
+    "selfie_identity": "ashray",
+    "expected_status": "match"
+  },
+  {
+    "category": "matched",
+    "document_file": "matched/riya_document.jpg",
+    "selfie_file": "matched/riya_selfie.jpg",
+    "document_identity": "riya",
+    "selfie_identity": "riya",
+    "expected_status": "match"
+  },
+  {
+    "category": "matched",
+    "document_file": "matched/srashti_document.jpg",
+    "selfie_file": "matched/srashti_selfie.jpg",
+    "document_identity": "srashti",
+    "selfie_identity": "srashti",
+    "expected_status": "match"
+  },
+  {
+    "category": "matched",
+    "document_file": "matched/yash_document.jpg",
+    "selfie_file": "matched/yash_selfie.jpg",
+    "document_identity": "yash",
+    "selfie_identity": "yash",
+    "expected_status": "match"
+  },
+  {
+    "category": "mismatched",
+    "document_file": "mismatched/anoop_vs_ashray_document.jpg",
+    "selfie_file": "mismatched/anoop_vs_ashray_selfie.jpg",
+    "document_identity": "anoop",
+    "selfie_identity": "ashray",
+    "expected_status": "mismatch"
+  },
+  {
+    "category": "mismatched",
+    "document_file": "mismatched/ashray_vs_riya_document.jpg",
+    "selfie_file": "mismatched/ashray_vs_riya_selfie.jpg",
+    "document_identity": "ashray",
+    "selfie_identity": "riya",
+    "expected_status": "mismatch"
+  },
+  {
+    "category": "mismatched",
+    "document_file": "mismatched/riya_vs_srashti_document.jpg",
+    "selfie_file": "mismatched/riya_vs_srashti_selfie.jpg",
+    "document_identity": "riya",
+    "selfie_identity": "srashti",
+    "expected_status": "mismatch"
+  },
+  {
+    "category": "mismatched",
+    "document_file": "mismatched/srashti_vs_yash_document.jpg",
+    "selfie_file": "mismatched/srashti_vs_yash_selfie.jpg",
+    "document_identity": "srashti",
+    "selfie_identity": "yash",
+    "expected_status": "mismatch"
+  },
+  {
+    "category": "mismatched",
+    "document_file": "mismatched/yash_vs_anoop_document.jpg",
+    "selfie_file": "mismatched/yash_vs_anoop_selfie.jpg",
+    "document_identity": "yash",
+    "selfie_identity": "anoop",
+    "expected_status": "mismatch"
+  }
+]

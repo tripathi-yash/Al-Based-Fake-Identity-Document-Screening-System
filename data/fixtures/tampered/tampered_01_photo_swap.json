@@ -1,0 +1,11 @@
+{
+  "filename": "tampered_01_photo_swap.jpg",
+  "doc_type": "passport",
+  "tamper_type": "photo_swap",
+  "based_on": "clean_passport_01.jpg",
+  "linked_db_id": "N1234567",
+  "what_was_changed": "Photo placeholder region overwritten with a different fill/text, image re-saved (double JPEG compression).",
+  "expected_module3_result": true,
+  "expected_module2_result": "checksum_pass=true (MRZ untouched)",
+  "expected_module4_result": "no_face_detected (no real face in either version)"
+}

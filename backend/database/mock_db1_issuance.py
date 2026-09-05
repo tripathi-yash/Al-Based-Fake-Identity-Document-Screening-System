@@ -18,16 +18,10 @@ Module 5, and Module 6 consistently without cross-module ID mismatches.
 """
 
 ISSUANCE_TABLE = {
-    "P1234567": {"status": "clear", "issued_to": "JOHN DOE"},
-    "P7654321": {"status": "blacklisted", "issued_to": "JANE SMITH"},
-    "P1112223": {"status": "expired", "issued_to": "ALEX KIM"},
-    "P9988776": {"status": "clear", "issued_to": "PRIYA SHARMA"},
-    "V5566778": {"status": "clear", "issued_to": "SAM CHEN"},
-    "V2233445": {"status": "blacklisted", "issued_to": "RYAN COLE"},
-    "N4455667": {"status": "clear", "issued_to": "MEERA IYER"},
-    "N7788990": {"status": "expired", "issued_to": "DAVID OKORO"},
+    # "P1234567": {"status": "clear", "issued_to": "JOHN DOE"},
+    # "P7654321": {"status": "blacklisted", "issued_to": "JANE SMITH"},
+    # "P1112223": {"status": "expired", "issued_to": "ALEX KIM"},
 }
-
 
 def lookup_document_status(document_number: str) -> str:
     """Returns 'clear' | 'blacklisted' | 'expired' | 'not_found'."""

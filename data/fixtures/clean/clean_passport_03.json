@@ -1,0 +1,18 @@
+{
+  "filename": "clean_passport_03.jpg",
+  "doc_type": "passport",
+  "source": "self-generated synthetic fixture (NOT from MIDV-500 dataset)",
+  "fields": {
+    "surname": "KHAN",
+    "given_names": "AAMIR RAZA",
+    "passport_number": "N3456789",
+    "nationality": "IND",
+    "date_of_birth": "2001-12-25",
+    "sex": "M",
+    "date_of_expiry": "2031-12-25"
+  },
+  "mrz": {
+    "line1": "P<INDKHAN<<AAMIR<RAZA<<<<<<<<<<<<<<<<<<<<<<<",
+    "line2": "N3456789<7IND0112259M3112250<<<<<<<<<<<<<<08"
+  }
+}
