@@ -18,34 +18,32 @@ from ...database.ledger_store import append_record, get_latest_hash
 
 
 def write_ledger_record(
-    ocr_result, validation_result, tamper_result, face_result, risk_result, authority_result=None
+    ocr_result, validation_result, tamper_result, face_result, risk_result,
+    authority_result=None, identity_reuse_result=None,
 ) -> dict:
     """
     Returns schema matches schema/module_io_schema.json ->
-    module6_blockchain_ledger exactly, plus an additional
-    authority_match_status field (see note below).
+    module6_blockchain_ledger exactly, plus authority_match_status and
+    identity_reuse_flag/matches, both now PERSISTED into record_data
+    (previously only returned transiently and never actually stored in
+    the hashed ledger record — fixed here).
 
-    face_embedding is pulled from face_result's doc_embedding field
-    (added to Module 4's return dict) — required for
-    identity_reuse_detection to have anything to compare against for
-    THIS screening.
-
-    authority_result is OPTIONAL (defaults to None) so this stays
-    backward compatible with callers that don't yet pass Module 5's
-    output (e.g. before routes.py is updated, or when Module 5 is
-    skipped entirely as a stretch goal per the action plan). When
-    provided, its status/similarity are preserved in the permanent
-    record — this matters because a Module 5 "mismatch" is the ONE
-    signal that catches a flawless physical forgery; that verdict must
-    be part of the tamper-evident audit trail, not just printed to a
-    console and discarded.
+    identity_reuse_result is OPTIONAL: pass in an already-computed result
+    (from calling search_for_identity_reuse() earlier in the pipeline,
+    BEFORE risk scoring) so the flag can influence compute_risk_score()
+    and this function doesn't redundantly recompute it. If not provided,
+    this function computes it internally as a fallback (e.g. for direct/
+    standalone calls like the __main__ smoke test below) — but note that
+    fallback path means risk_result passed in will NOT have reflected
+    this flag, since scoring already happened by the time this runs.
     """
     declared_identity = ocr_result.get("extracted_fields", {}).get("name", {}).get("value")
     declared_doc_number = ocr_result.get("extracted_fields", {}).get("passport_number", {}).get("value")
 
     new_embedding = face_result.get("doc_embedding")
 
-    reuse_result = search_for_identity_reuse(new_embedding, declared_identity, declared_doc_number)
+    if identity_reuse_result is None:
+        identity_reuse_result = search_for_identity_reuse(new_embedding, declared_identity, declared_doc_number)
 
     authority_match_status = authority_result.get("status") if authority_result else None
     authority_match_similarity = authority_result.get("similarity") if authority_result else None
@@ -59,6 +57,8 @@ def write_ledger_record(
         "face_embedding": new_embedding,
         "authority_match_status": authority_match_status,
         "authority_match_similarity": authority_match_similarity,
+        "identity_reuse_flag": identity_reuse_result["identity_reuse_flag"],
+        "identity_reuse_matches": identity_reuse_result["identity_reuse_matches"],
     }
     record_hash = compute_record_hash(previous_hash, record_data)
 
@@ -70,8 +70,8 @@ def write_ledger_record(
         "record_hash": record_hash,
         "previous_hash": previous_hash,
         "timestamp": stored_record["timestamp"],
-        "identity_reuse_flag": reuse_result["identity_reuse_flag"],
-        "identity_reuse_matches": reuse_result["identity_reuse_matches"],
+        "identity_reuse_flag": identity_reuse_result["identity_reuse_flag"],
+        "identity_reuse_matches": identity_reuse_result["identity_reuse_matches"],
         "authority_match_status": authority_match_status,
     }
 
@@ -106,13 +106,7 @@ if __name__ == "__main__":
     fake_ocr_result = {"extracted_fields": {"passport_number": {"value": "P1234567"}}}
     authority_result = run_authority_match(fake_ocr_result, image_bytes)
 
-    # NOTE: verify compute_risk_score's actual declared signature in
-    # scoring.py before running this — it may not yet accept
-    # authority_result as a parameter at all, since Module 5's
-    # integration into the risk engine hasn't been finalized. Passing an
-    # extra unexpected argument will raise TypeError if the stub
-    # signature doesn't include it.
-    risk_result = compute_risk_score(ocr_result, validation_result, tamper_result, face_result)
+    risk_result = compute_risk_score(validation_result, tamper_result, face_result, authority_result)
 
     print("--- authority_result ---")
     print(authority_result)
