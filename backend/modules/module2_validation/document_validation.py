@@ -9,125 +9,59 @@ Depends directly on Module 1's output — cannot run standalone (Section 4
 prerequisites). Never raises on bad/partial input: every failure mode
 returns a defined status in the output schema instead (Section 13).
 
-Edge cases owned (Section 4):
-  1. MRZ checksum verification (7-3-1 weighted formula) — catches
-     physical alteration where the MRZ check digit wasn't recomputed.
-  2. Visible printed text vs. MRZ text cross-check — catches physical
-     alteration where one zone (printed or MRZ) was updated and the
-     other wasn't.
-  3. Expired / blacklisted document — catches a genuinely clean
-     document that is simply invalid per records (Mock DB #1),
-     independent of any image analysis.
+CHANGED — full list, this refactor pass:
+  1. Fixed absolute imports (`from checksum import ...`) to relative
+     (`.checksum`) — the package has an __init__.py, absolute imports
+     failed on real import.
+  2. Added run_validation() as the actual entry point — routes.py imports
+     this name, but only document_validation() existed before.
+  3. REMOVED the embedded DOC_TYPES_CONFIG dict — this was a THIRD copy
+     of doc-type config in the codebase (alongside config/
+     doc_types_config.json and Module 1's own local copy). Now loads
+     from the SAME shared loader Module 1 uses
+     (backend/modules/shared/doc_types_config_loader.py), which reads
+     config/doc_types_config.json, the project's one canonical source.
+  4. REMOVED the embedded MOCK_DB_1 / MockIssuanceDB class — this was a
+     SEPARATE, differently-shaped duplicate of backend/database/
+     mock_db1_issuance.py. Now imports lookup_document_status()
+     directly from there.
+  5. iso3166.py MOVED to backend/modules/shared/ (general reference data,
+     not Module-2-specific logic) — import path updated accordingly.
+  6. text_mrz_crosscheck() no longer hardcodes "passport_number" — takes
+     id_field_name as a parameter, read from doc_config.
+  7. validation_rules is no longer decorative — each doc type's declared
+     list in doc_types_config.json now actually gates which checks run.
+  8. visa's "expiry_check" rule has no corresponding field in
+     expected_fields (only "entry_validation", undocumented semantics) —
+     NOT silently guessed. Flagged as "visa_expiry_check_unresolved".
+  9. visa's "stay_duration_range_check" has no defined range spec
+     anywhere in the project — NOT fabricated. Flagged as
+     "stay_duration_check_not_implemented".
 
-Output shape is the exact Section 9b stub contract — real logic here
-must never deviate from it; that contract is what lets the rest of the
-pipeline (already integrated against the mock stub) keep working
-unchanged once this file replaces stub.py's Module 2 function.
+Edge cases owned (Section 4):
+  1. MRZ checksum verification (7-3-1 weighted formula).
+  2. Visible printed text vs. MRZ text cross-check.
+  3. Expired / blacklisted document (Mock DB #1).
+
+Output shape is the exact Section 9b stub contract — must not change.
 """
 
-import re
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
+import re
 
-from checksum import verify_check_digit, verify_composite_check
-from iso3166 import is_valid_country_code
-
-# ---------------------------------------------------------------------------
-# Section 11 — multi-document-type config (source of truth for how each doc
-# type is validated). In production this lives in doc_types_config.json;
-# embedded here so the module has no external file dependency out of the box.
-# ---------------------------------------------------------------------------
-DOC_TYPES_CONFIG: Dict[str, Dict[str, Any]] = {
-    "passport": {
-        "mrz_format": "TD3",
-        "checksum_required": True,
-        "expected_fields": ["name", "passport_number", "nationality", "dob", "expiry", "gender"],
-        "validation_rules": ["checksum", "expiry_check", "text_mrz_crosscheck"],
-        "id_field": "passport_number",
-    },
-    "visa": {
-        "mrz_format": "TD3_or_none",
-        "checksum_required": False,
-        "expected_fields": ["visa_number", "visa_type", "entry_validation", "stay_duration"],
-        "validation_rules": ["expiry_check", "stay_duration_range_check"],
-        "id_field": "visa_number",
-    },
-    "national_id": {
-        "mrz_format": "TD1",
-        "checksum_required": True,
-        "expected_fields": ["name", "id_number", "dob"],
-        "validation_rules": ["checksum"],
-        "id_field": "id_number",
-    },
-    "driving_license": {
-        "mrz_format": "none",
-        "checksum_required": False,
-        "expected_fields": ["name", "license_number", "dob", "expiry"],
-        "validation_rules": ["expiry_check"],
-        "id_field": "license_number",
-    },
-    "permit": {
-        "mrz_format": "none",
-        "checksum_required": False,
-        "expected_fields": ["name", "permit_number", "validity"],
-        "validation_rules": ["expiry_check"],
-        "id_field": "permit_number",
-    },
-}
-
-# ---------------------------------------------------------------------------
-# Mock DB #1 — Issuance/Blacklist table (Section 4 prerequisite, Section 12
-# task allocation). 5-10 entries; some drawn from the MIDV-500 subset actually
-# used for fixtures, some invented. IDs here MUST match fixture IDs exactly —
-# a single typo silently breaks Module 2 tests (Section 12 golden rule).
-# Real deployment: same lookup interface, backed by a live government
-# issuance/blacklist system instead of this dict (Section 7).
-# ---------------------------------------------------------------------------
-MOCK_DB_1: Dict[str, str] = {
-    # passport_number / visa_number / id_number -> "issued" | "expired" | "blacklisted"
-    "P1234567": "issued",
-    "P7654321": "blacklisted",
-    "P1122334": "expired",
-    "P9988776": "issued",
-    "V5566778": "issued",
-    "V2233445": "blacklisted",
-    "N4455667": "issued",
-    "N7788990": "expired",
-}
-
-_DB_STATUS_MAP = {
-    "issued": "clear",
-    "expired": "expired",
-    "blacklisted": "blacklisted",
-}
-
-
-class MockIssuanceDB:
-    """Thin lookup wrapper so document_validation() doesn't touch the raw
-    dict directly — makes it a one-line swap to a real DB client later."""
-
-    def __init__(self, table: Optional[Dict[str, str]] = None):
-        self._table = table if table is not None else MOCK_DB_1
-
-    def lookup(self, doc_id: Optional[str]) -> str:
-        """Returns 'clear' | 'blacklisted' | 'expired' | 'not_found'."""
-        if not doc_id:
-            return "not_found"
-        raw_status = self._table.get(doc_id.strip().upper())
-        if raw_status is None:
-            return "not_found"
-        return _DB_STATUS_MAP.get(raw_status, "not_found")
+from .checksum import verify_check_digit, verify_composite_check
+from ..shared.iso3166 import is_valid_country_code
+from ..shared.doc_types_config_loader import load_doc_types_config
+from ...database.mock_db1_issuance import lookup_document_status
 
 
 # ---------------------------------------------------------------------------
 # MRZ parsing — TD3 (passport, 2-line x 44-char) line 2 field layout.
 # ---------------------------------------------------------------------------
 def parse_td3_line2(line2: str) -> Optional[Dict[str, str]]:
-    """
-    Split a TD3 MRZ line 2 into its fixed-width fields per ICAO 9303.
-    Returns None (never raises) if the line isn't the expected 44 chars —
-    a damaged/misread MRZ is a real condition, not a bug.
-    """
+    """Split a TD3 MRZ line 2 into its fixed-width fields per ICAO 9303.
+    Returns None (never raises) if the line isn't the expected 44 chars."""
     if not line2 or len(line2) != 44:
         return None
     return {
@@ -146,18 +80,13 @@ def parse_td3_line2(line2: str) -> Optional[Dict[str, str]]:
 
 
 def _yymmdd_to_iso(yymmdd: str, *, is_expiry: bool) -> Optional[str]:
-    """Convert MRZ 6-digit YYMMDD to ISO 8601, with ICAO's century pivot:
-    expiry dates are always in the future window (00-79 -> 20xx by
-    convention for expiry), DOB defaults to the past (00-30 -> 20xx,
-    31-99 -> 19xx) — a documented heuristic, not a guarantee."""
+    """ICAO century-pivot convention: expiry always future window
+    (00-79 -> 20xx), DOB defaults to past (00-30 -> 20xx, 31-99 -> 19xx)."""
     try:
         yy, mm, dd = int(yymmdd[0:2]), int(yymmdd[2:4]), int(yymmdd[4:6])
     except (ValueError, IndexError):
         return None
-    if is_expiry:
-        century = 2000
-    else:
-        century = 2000 if yy <= 30 else 1900
+    century = 2000 if is_expiry else (2000 if yy <= 30 else 1900)
     try:
         return date(century + yy, mm, dd).isoformat()
     except ValueError:
@@ -165,12 +94,8 @@ def _yymmdd_to_iso(yymmdd: str, *, is_expiry: bool) -> Optional[str]:
 
 
 def mrz_checksum_results(mrz: Dict[str, str]) -> Tuple[Optional[bool], List[str]]:
-    """
-    Run every TD3 check digit (Edge case 1: 7-3-1 checksum verification).
-    Returns (overall_pass_or_None, list_of_failed_field_flags).
-    overall is None only if every relevant check digit was filler (should
-    not happen for doc_number/dob/expiry on a real passport).
-    """
+    """Run every TD3 check digit (Edge case 1). Returns (overall_pass_or_None,
+    list_of_failed_field_flags)."""
     flags: List[str] = []
     results: List[bool] = []
 
@@ -183,7 +108,7 @@ def mrz_checksum_results(mrz: Dict[str, str]) -> Tuple[Optional[bool], List[str]
     for _name, data, check_digit, flag in checks:
         result = verify_check_digit(data, check_digit)
         if result is None:
-            continue  # filler check digit, field not in use — not a failure
+            continue
         results.append(result)
         if not result:
             flags.append(flag)
@@ -216,17 +141,15 @@ def _normalize(text: Optional[str]) -> str:
     return re.sub(r"[^A-Z0-9]", "", text.strip().upper())
 
 
-def text_mrz_crosscheck(extracted_fields: Dict[str, Any], mrz: Dict[str, str]) -> Tuple[bool, List[str]]:
-    """
-    Compare Module 1's printed-zone OCR fields against the MRZ-parsed
-    fields for the same document. A mismatch means one zone was edited
-    (e.g. printed DOB altered) without recomputing the other — exactly
-    the physical-alteration pattern this check exists to catch
-    (Section 4, Section 6 fraud-scenario matrix).
-    """
+def text_mrz_crosscheck(
+    extracted_fields: Dict[str, Any], mrz: Dict[str, str], id_field_name: str
+) -> Tuple[bool, List[str]]:
+    """Compare Module 1's printed-zone OCR fields against MRZ-parsed
+    fields. id_field_name comes from doc_config (was hardcoded to
+    "passport_number" before this refactor)."""
     flags: List[str] = []
 
-    printed_doc_num = extracted_fields.get("passport_number", {}).get("value")
+    printed_doc_num = extracted_fields.get(id_field_name, {}).get("value")
     if printed_doc_num is not None and _normalize(printed_doc_num) != _normalize(mrz["doc_number"]):
         flags.append("text_mrz_mismatch_doc_number")
 
@@ -248,7 +171,7 @@ def text_mrz_crosscheck(extracted_fields: Dict[str, Any], mrz: Dict[str, str]) -
 
 
 # ---------------------------------------------------------------------------
-# Expiry check — applies to every doc type (Section 11).
+# Expiry check — gated by validation_rules, applies where declared.
 # ---------------------------------------------------------------------------
 def is_expiry_valid(expiry_iso: Optional[str], *, today: Optional[date] = None) -> Optional[bool]:
     if not expiry_iso:
@@ -265,17 +188,12 @@ def is_expiry_valid(expiry_iso: Optional[str], *, today: Optional[date] = None) 
 # ---------------------------------------------------------------------------
 def document_validation(
     ocr_output: Dict[str, Any],
-    mock_db: Optional[MockIssuanceDB] = None,
     config: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    """
-    Module 2 main entry point. Consumes Module 1's exact output schema
-    (Section 9b) and returns Module 2's exact output schema (Section 9b) —
-    the shape must not change regardless of internal logic changes, real
-    or mocked, per the mock-first integration strategy (Section 9a).
-    """
-    db = mock_db or MockIssuanceDB()
-    cfg = config or DOC_TYPES_CONFIG
+    """Module 2 main entry point. Consumes Module 1's exact output schema
+    and returns Module 2's exact output schema (Section 9b) — shape must
+    not change regardless of internal logic changes."""
+    cfg = config or load_doc_types_config()
 
     result: Dict[str, Any] = {
         "module": "document_validation",
@@ -287,7 +205,6 @@ def document_validation(
         "flags": [],
     }
 
-    # Module 1 failed outright — nothing to validate (never crash, Section 13).
     if not ocr_output or ocr_output.get("status") == "failed":
         result["flags"].append("upstream_ocr_failed")
         return result
@@ -300,27 +217,19 @@ def document_validation(
 
     extracted_fields = ocr_output.get("extracted_fields", {}) or {}
     flags: List[str] = []
+    rules = set(doc_config.get("validation_rules", []))
 
-    # --- doc-type-appropriate ID field lookup (Section 11 dispatch) -------
     id_field_name = doc_config["id_field"]
     doc_id = extracted_fields.get(id_field_name, {}).get("value")
 
-    # --- MRZ-dependent checks (checksum + cross-check), dispatched by
-    # config, per Section 11: only run where mrz_format actually applies.
     mrz_format = doc_config["mrz_format"]
     mrz_raw = ocr_output.get("mrz_raw") or {}
     mrz_line2 = mrz_raw.get("line2")
 
     if mrz_format == "none":
-        # Explicitly null, not defaulted to True (Section 9b requirement).
         result["checksum_pass"] = None
         result["text_mrz_match"] = None
     elif mrz_format == "TD1":
-        # TD1 (national ID) MRZ is a 3-line x 30-char layout, structurally
-        # different from TD3 — not implemented in this prototype. Stated
-        # limitation, not a silent gap: national ID is explicitly a
-        # secondary/generic-OCR-only doc type (Section 11), so we report
-        # this honestly rather than misreport it as a scan-quality issue.
         result["checksum_pass"] = None
         result["text_mrz_match"] = None
         flags.append("td1_checksum_not_implemented")
@@ -328,35 +237,41 @@ def document_validation(
         parsed_mrz = parse_td3_line2(mrz_line2) if mrz_line2 else None
         if parsed_mrz is None:
             if mrz_format == "TD3_or_none":
-                # Visa without an MRZ is valid by design — not a failure.
                 result["checksum_pass"] = None
                 result["text_mrz_match"] = None
             else:
-                # MRZ was expected (TD3 passport) but unreadable/malformed —
-                # flag it, don't silently pass.
                 result["checksum_pass"] = False
                 result["text_mrz_match"] = False
                 flags.append("mrz_unreadable")
         else:
-            checksum_pass, checksum_flags = mrz_checksum_results(parsed_mrz)
-            match_pass, match_flags = text_mrz_crosscheck(extracted_fields, parsed_mrz)
-            result["checksum_pass"] = checksum_pass
-            result["text_mrz_match"] = match_pass
-            flags.extend(checksum_flags)
-            flags.extend(match_flags)
+            if "checksum" in rules:
+                checksum_pass, checksum_flags = mrz_checksum_results(parsed_mrz)
+                result["checksum_pass"] = checksum_pass
+                flags.extend(checksum_flags)
+
+            if "text_mrz_crosscheck" in rules:
+                match_pass, match_flags = text_mrz_crosscheck(extracted_fields, parsed_mrz, id_field_name)
+                result["text_mrz_match"] = match_pass
+                flags.extend(match_flags)
 
             if not is_valid_country_code(parsed_mrz.get("nationality", "")):
                 flags.append("invalid_country_code")
 
-    # --- expiry check (applies to every doc type) --------------------------
-    expiry_value = extracted_fields.get("expiry", {}).get("value") or extracted_fields.get("validity", {}).get("value")
-    expiry_valid = is_expiry_valid(expiry_value)
-    result["expiry_valid"] = expiry_valid
-    if expiry_valid is False:
-        flags.append("expiry_passed")
+    if "expiry_check" in rules:
+        expiry_value = extracted_fields.get("expiry", {}).get("value") or extracted_fields.get("validity", {}).get("value")
+        if expiry_value is None and doc_type == "visa":
+            flags.append("visa_expiry_check_unresolved")
+            result["expiry_valid"] = None
+        else:
+            expiry_valid = is_expiry_valid(expiry_value)
+            result["expiry_valid"] = expiry_valid
+            if expiry_valid is False:
+                flags.append("expiry_passed")
 
-    # --- Mock DB #1 lookup (Edge case 3: expired/blacklisted record) -------
-    db_status = db.lookup(doc_id)
+    if "stay_duration_range_check" in rules:
+        flags.append("stay_duration_check_not_implemented")
+
+    db_status = lookup_document_status(doc_id)
     result["db_status"] = db_status
     if db_status == "blacklisted":
         flags.append("db_blacklisted")
@@ -366,5 +281,19 @@ def document_validation(
         flags.append("db_not_found")
 
     result["flags"] = flags
-    result["status"] = "success" if ocr_output.get("status") == "success" else "partial"
+    # Schema (module2_document_validation) allows only "success" | "failed"
+    # — no "partial". The earlier version returned "partial" when Module 1
+    # itself only partially succeeded; fixed to match the schema exactly.
+    # Fine-grained detail (what specifically didn't check out) already
+    # lives in `flags`, so status only needs to mean "validation ran".
+    result["status"] = "success"
     return result
+
+
+def run_validation(ocr_result: Dict[str, Any], doc_type: Optional[str] = None) -> Dict[str, Any]:
+    """Public entry point — matches what routes.py actually imports/calls:
+        from modules.module2_validation.document_validation import run_validation
+        validation_result = run_validation(ocr_result, doc_type)
+    doc_type accepted for call-signature compatibility; not required
+    internally since document_validation() reads it from ocr_result."""
+    return document_validation(ocr_result)
