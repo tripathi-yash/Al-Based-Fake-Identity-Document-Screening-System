@@ -23,11 +23,12 @@
   "module2_document_validation": {
     "module": "document_validation",
     "status": "success | failed",
-    "checksum_pass": "true | false | null (null only when mrz_format is 'none' for that doc type)",
+    "checksum_pass": "true | false | null",
     "text_mrz_match": "true | false | null",
     "expiry_valid": true,
     "db_status": "clear | blacklisted | expired | not_found",
-    "flags": ["list of short strings, e.g. checksum_fail, expiry_passed -- empty list when clean"]
+    "flags": ["list of short strings, e.g. checksum_fail, expiry_passed -- empty list when clean"],
+    "_note": "checksum_pass/text_mrz_match are null whenever no MRZ check digit could be verified for this doc_type/format — this covers mrz_format=='none', TD1 (national_id MRZ parsing is a stated, not-yet-implemented limitation), and TD3_or_none formats (e.g. visa) submitted without an MRZ at all. Not limited to mrz_format=='none' alone."
   },
 
   "module3_tampering_detection": {
@@ -51,7 +52,8 @@
     "similarity": "0.0-1.0, or null if status is no_face_detected",
     "threshold_used": 0.6,
     "face_detected_in_document": true,
-    "face_detected_in_live": true
+    "face_detected_in_live": true,
+    "doc_embedding": "list[float] or null - FaceNet embedding of the document photo. Additive field (not in the original Day-2 contract): consumed by Module 6's identity_reuse_detection for cross-checkpoint nearest-neighbor search. Absent/null is safe for any consumer that doesn't need it."
   },
 
   "module5_authority_reference_match": {
@@ -65,11 +67,14 @@
   "module6_blockchain_ledger": {
     "module": "blockchain_ledger",
     "status": "success | failed",
-    "record_hash": "sha256 hex string",
-    "previous_hash": "sha256 hex string of prior record, or genesis value for first record",
+    "record_hash": "sha256 hex string, or null if status is failed",
+    "previous_hash": "sha256 hex string of prior record, or genesis value for first record, or null if status is failed",
     "timestamp": "ISO 8601 datetime, e.g. 2026-09-01T10:15:00Z",
     "identity_reuse_flag": false,
-    "identity_reuse_matches": ["list of prior record IDs when identity_reuse_flag is true, empty otherwise"]
+    "identity_reuse_matches": ["list of prior record IDs when identity_reuse_flag is true, empty otherwise"],
+    "authority_match_status": "match | mismatch | not_available | null - Module 5's status at the time this record was written, PERSISTED into the tamper-evident ledger (not just returned transiently). null means Module 5 wasn't run for this screening at all (e.g. cut entirely, or caller didn't pass authority_result) - distinct from Module 5 itself returning not_available, which is a real dict value, not a missing one.",
+    "authority_match_similarity": "0.0-1.0, or null",
+    "_note": "final_recommendation is what the dashboard displays most prominently. authority_match_status is preserved here specifically because a Module 5 'mismatch' is the one signal that catches a flawless physical forgery - that verdict must survive in the permanent audit trail, not just appear once in an API response and be discarded. Team decision 2026-09 to formalize this into the schema (previously an undocumented additive field)."
   },
 
   "risk_scoring_engine": {
@@ -79,6 +84,6 @@
     "evidence_band": "high | low",
     "final_recommendation": "clear | secondary_check | high_risk",
     "contributing_flags": ["list of strings explaining why the score is what it is"],
-    "_note": "final_recommendation is what the dashboard displays most prominently. Dashboard should never compute this logic itself, only display it."
+    "_note": "final_recommendation is what the dashboard displays most prominently. Dashboard should never compute this logic itself, only display it. A confident Module 5 mismatch or Module 6 identity_reuse_flag acts as a FLOOR on risk_score (forces high_risk regardless of the weighted average from Modules 2/3/4) rather than a blended weight - see risk_engine/scoring.py's module docstring for the full rationale."
   }
 }
