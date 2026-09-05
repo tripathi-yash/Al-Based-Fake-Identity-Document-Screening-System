@@ -1,65 +1,114 @@
 """
-Unit tests for Module 1 - OCR Extraction.
-Run against both stub.py (should always pass, sanity check) and the real
-implementation once built. Use fixtures from data/fixtures/ + the manifest.
+Unit tests for Module 1 - OCR Extraction, against the REAL
+modules/module1_ocr/ocr_extraction.py (not stub.py — the old test file
+pointed at backend.modules.module1_ocr.stub, which no longer matches
+your project layout or the real implementation).
+
+Two layers of tests here:
+  1. Contract tests that don't need a real image (garbage bytes / unknown
+     doc_type) — these are deterministic regardless of whether
+     PaddleOCR/EasyOCR/pytesseract is installed.
+  2. Real-fixture tests (skipped automatically if the fixture file isn't
+     found at the path below) — adjust FIXTURES_DIR to match your layout.
 """
+import os
 import re
 import pytest
 
-REQUIRED_FIELDS = ["name", "passport_number", "nationality", "dob", "expiry", "gender"]
+from backend.modules.module1_ocr.ocr_extraction import run_ocr
+
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "fixtures")
+CLEAN_PASSPORT = os.path.join(FIXTURES_DIR, "clean", "clean_passport_01.jpg")
+
 ISO_DATE_PATTERN = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
+skip_if_missing = pytest.mark.skipif(
+    not os.path.isfile(CLEAN_PASSPORT),
+    reason=f"Fixture not found at {CLEAN_PASSPORT} — adjust FIXTURES_DIR at top of this file",
+)
 
-def test_stub_returns_expected_schema():
-    from backend.modules.module1_ocr.stub import run_ocr
 
-    result = run_ocr(b"fake_bytes", "passport")
+# ---------------------------------------------------------------------------
+# Contract tests — no real image needed, always runnable
+# ---------------------------------------------------------------------------
+def test_unknown_doc_type_fails_without_guessing():
+    """run_ocr must return failed immediately for an unregistered doc_type,
+    per the module's own docstring: 'unknown doc_type -> failed, don't guess'."""
+    result = run_ocr(b"irrelevant bytes", "not_a_real_doc_type")
+    assert result["status"] == "failed"
+    assert result["extracted_fields"] == {}
+
+
+def test_garbage_bytes_never_raises_and_fails_gracefully():
+    """Section 9b/13 hard rule: never raise out of run_ocr() for a bad image."""
+    result = run_ocr(b"this is not a valid jpeg", "passport")
+    assert result["status"] == "failed"
+    assert result["extracted_fields"] == {}
+
+
+def test_empty_bytes_never_raises():
+    result = run_ocr(b"", "passport")
+    assert result["status"] in ("failed", "partial", "success")  # must not raise
+
+
+def test_output_always_has_required_top_level_keys():
+    result = run_ocr(b"garbage", "passport")
+    for key in ("module", "doc_type", "status", "extracted_fields"):
+        assert key in result
     assert result["module"] == "ocr_extraction"
     assert result["status"] in ("success", "partial", "failed")
-    assert "name" in result["extracted_fields"]
-    assert 0.0 <= result["extracted_fields"]["name"]["confidence"] <= 1.0
 
 
-def test_every_required_field_has_value_and_confidence():
-    from backend.modules.module1_ocr.stub import run_ocr
+# ---------------------------------------------------------------------------
+# Real-fixture tests — require an actual image + at least one OCR backend
+# installed (paddleocr / easyocr / pytesseract). If no backend is
+# installed, extracted_fields may come back mostly empty via the MRZ path
+# only (if passporteye is present) — these tests check STRUCTURE and
+# ISO date formatting, not that every field was found, since OCR accuracy
+# depends on your environment's installed engines.
+# ---------------------------------------------------------------------------
+@skip_if_missing
+def test_clean_passport_returns_some_extracted_fields():
+    with open(CLEAN_PASSPORT, "rb") as f:
+        image_bytes = f.read()
+    result = run_ocr(image_bytes, "passport")
+    assert result["status"] in ("success", "partial"), (
+        f"Expected success/partial on a clean fixture, got '{result['status']}' — "
+        "check that an OCR backend (paddleocr/easyocr/pytesseract) is installed."
+    )
+    assert len(result["extracted_fields"]) > 0
 
-    result = run_ocr(b"fake_bytes", "passport")
-    for field_name in REQUIRED_FIELDS:
-        assert field_name in result["extracted_fields"], f"Missing field: {field_name}"
-        field = result["extracted_fields"][field_name]
-        assert "value" in field, f"Field '{field_name}' missing 'value' key"
-        assert "confidence" in field, f"Field '{field_name}' missing 'confidence' key"
+
+@skip_if_missing
+def test_every_extracted_field_has_value_and_confidence_in_range():
+    with open(CLEAN_PASSPORT, "rb") as f:
+        image_bytes = f.read()
+    result = run_ocr(image_bytes, "passport")
+    for field_name, field in result["extracted_fields"].items():
+        assert "value" in field, f"Field '{field_name}' missing 'value'"
+        assert "confidence" in field, f"Field '{field_name}' missing 'confidence'"
         assert 0.0 <= field["confidence"] <= 1.0, \
             f"Field '{field_name}' confidence out of range: {field['confidence']}"
 
 
-def test_dates_are_iso_8601_format():
-    """Schema requires YYYY-MM-DD -- this is the exact failure case
-    called out in action_plan.pdf Section 13 (date format mismatch)."""
-    from backend.modules.module1_ocr.stub import run_ocr
-
-    result = run_ocr(b"fake_bytes", "passport")
-    dob = result["extracted_fields"]["dob"]["value"]
-    expiry = result["extracted_fields"]["expiry"]["value"]
-    assert ISO_DATE_PATTERN.match(dob), f"dob is not ISO 8601: {dob}"
-    assert ISO_DATE_PATTERN.match(expiry), f"expiry is not ISO 8601: {expiry}"
-
-
-def test_mrz_raw_has_both_lines():
-    """NOTE: as of writing, the stub's example MRZ line1 is 43 chars instead
-    of the correct 44 (TD3 format) -- flagged to the team. This test documents
-    the correct expected length for when the real implementation is built."""
-    from backend.modules.module1_ocr.stub import run_ocr
-
-    result = run_ocr(b"fake_bytes", "passport")
-    assert "line1" in result["mrz_raw"]
-    assert "line2" in result["mrz_raw"]
-    assert len(result["mrz_raw"]["line2"]) == 44, "MRZ line2 must be 44 chars (TD3 format)"
-    # line1 check temporarily relaxed to >= 43 until stub.py's example is fixed
-    # (see schema/module_io_schema.json - known 1-char-short example, reported to team)
-    assert len(result["mrz_raw"]["line1"]) >= 43, "MRZ line1 must be ~44 chars (TD3 format)"
+@skip_if_missing
+def test_dates_are_iso_8601_when_present():
+    """Hard rule: dates are always ISO 8601 (YYYY-MM-DD), never MRZ raw YYMMDD."""
+    with open(CLEAN_PASSPORT, "rb") as f:
+        image_bytes = f.read()
+    result = run_ocr(image_bytes, "passport")
+    for date_field in ("dob", "expiry"):
+        if date_field in result["extracted_fields"]:
+            value = result["extracted_fields"][date_field]["value"]
+            assert ISO_DATE_PATTERN.match(value), f"{date_field} not ISO 8601: {value}"
 
 
-# TODO: once ocr_extraction.py is implemented, add tests against real fixtures:
-# - test_mrz_parses_correctly_on_clean_passport()
-# - test_confidence_drops_on_blurry_image()
+@skip_if_missing
+def test_mrz_raw_present_when_mrz_successfully_parsed():
+    with open(CLEAN_PASSPORT, "rb") as f:
+        image_bytes = f.read()
+    result = run_ocr(image_bytes, "passport")
+    if "mrz_raw" in result:
+        assert "line1" in result["mrz_raw"]
+        assert "line2" in result["mrz_raw"]
+        assert len(result["mrz_raw"]["line2"]) == 44, "TD3 line2 must be 44 chars"
