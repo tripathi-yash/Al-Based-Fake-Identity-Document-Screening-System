@@ -54,6 +54,8 @@ def verify_chain_integrity() -> dict:
             "face_embedding": record.get("face_embedding"),
             "authority_match_status": record.get("authority_match_status"),
             "authority_match_similarity": record.get("authority_match_similarity"),
+            "identity_reuse_flag": record.get("identity_reuse_flag"),
+            "identity_reuse_matches": record.get("identity_reuse_matches"),
         }
         expected_hash = compute_record_hash(expected_previous_hash, record_data)
 
