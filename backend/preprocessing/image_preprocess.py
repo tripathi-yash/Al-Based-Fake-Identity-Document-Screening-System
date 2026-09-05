@@ -23,6 +23,20 @@ they have different safety properties for different consumers:
 
 Do not duplicate either function's logic inside individual module files —
 import from here.
+
+BUG FIX (this pass): correct_geometry()'s Otsu-threshold + minAreaRect
+deskew technique assumes a scanned document with a distinct page
+silhouette on a contrasting background. On a full-frame rendered image
+(text/content fills the entire frame, no real "page boundary" — e.g. our
+synthetic passport fixtures, and any plain-background selfie/document
+photo) Otsu treats nearly the whole frame as foreground, minAreaRect's
+angle becomes meaningless noise, and the resulting "correction" applies
+a garbage rotation that destroys the image for OCR/face detection.
+Confirmed via direct debugging: EasyOCR read the raw fixture perfectly,
+then produced only single-character noise after correct_geometry() ran.
+Fixed by sanity-checking the detected rect before trusting its angle:
+skip correction entirely if no real boundary was found, or if the
+computed angle is implausibly large for a genuine scan tilt.
 """
 import cv2
 import numpy as np
@@ -30,9 +44,10 @@ import numpy as np
 
 def correct_geometry(image):
     """Deskew + perspective-correct. Returns the corrected image (numpy
-    array), or the original image unchanged if correction fails — must
-    never raise, since a bad/unusual image is a normal input case, not
-    an error condition."""
+    array), or the original image unchanged if correction fails OR if no
+    genuine page boundary is detected to correct against — must never
+    raise, since a bad/unusual image is a normal input case, not an
+    error condition."""
     if image is None:
         return image
 
@@ -41,12 +56,36 @@ def correct_geometry(image):
 
         thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
         coords = cv2.findNonZero(thresh)
-        angle = 0.0
-        if coords is not None:
-            rect_angle = cv2.minAreaRect(coords)[-1]
-            angle = -(90 + rect_angle) if rect_angle < -45 else -rect_angle
+        if coords is None:
+            return image
 
-        (h, w) = gray.shape[:2]
+        rect = cv2.minAreaRect(coords)
+        (rect_w, rect_h), rect_angle = rect[1], rect[2]
+
+        h, w = gray.shape[:2]
+        image_area = h * w
+        rect_area = rect_w * rect_h
+
+        # Safety check 1: if Otsu marks ~the whole frame as "foreground"
+        # (full-bleed rendered card, plain-background photo), there is no
+        # real page boundary to deskew against — minAreaRect's angle is
+        # noise, not a measurement. Bail out rather than rotate blindly.
+        # 0.9 threshold chosen so a genuinely tilted scanned page (which
+        # still leaves visible margin around it) is unaffected.
+        if rect_area >= 0.9 * image_area:
+            return image
+
+        angle = -(90 + rect_angle) if rect_angle < -45 else -rect_angle
+
+        # Safety check 2: a real deskew correction on a photographed/
+        # scanned document is a SMALL angle (a few degrees of tilt).
+        # Anything wildly larger is almost certainly a bad Otsu/
+        # minAreaRect read on a low-contrast or full-frame image, not a
+        # genuine skew — applying it would rotate the image into a
+        # essentially random orientation instead of leaving it alone.
+        if abs(angle) > 15:
+            return image
+
         center = (w // 2, h // 2)
         rot_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
         deskewed = cv2.warpAffine(
