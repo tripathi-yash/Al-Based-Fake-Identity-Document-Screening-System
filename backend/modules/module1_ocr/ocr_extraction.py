@@ -4,45 +4,52 @@ ocr_extraction.py — Module 1 (OCR Extraction), real implementation.
 Function: convert a document image into structured field data
 (Action Plan, Section 4 — Module 1).
 
+CONSISTENCY FIX from the previous version: run_ocr() now takes raw
+IMAGE BYTES, not a file path. routes.py calls
+    run_ocr(doc_bytes, doc_type)
+passing bytes read directly from the upload (await doc_image.read()) —
+every other module (3, 4, 5) takes *_bytes: bytes as its first argument.
+A path-based signature here was the one inconsistency in the pipeline.
+
 Pipeline:
-    image -> OpenCV preprocessing (deskew, perspective-correct, contrast)
-          -> config-driven dispatch on doc_type (Section 11)
+    bytes -> decode -> shared preprocessing (backend/preprocessing/
+             image_preprocess.py: preprocess_for_ocr — deskew,
+             perspective-correct, contrast/glare normalize)
+          -> config-driven dispatch on doc_type, using the SAME loader
+             Module 2 uses (backend/modules/shared/
+             doc_types_config_loader.py -> config/doc_types_config.json)
                -> mrz_format != "none": crop MRZ band, OCR it, parse with
                   mrz_parser.parse_mrz()
                -> generic field-region OCR for the visual zone / doc types
-                  with no MRZ (driving_license, permit) or as a
-                  text/MRZ cross-check source for doc types that have one
+                  with no MRZ, or as a supplementary source
           -> assemble output in the exact Section 9b contract
 
 Hard rules from the plan that this file must respect:
-  * Never raise out of extract_ocr() for a bad image — return
-    status="failed" instead (Section 9b / Section 13).
-  * Every extracted field carries a 0.0-1.0 confidence score, no exceptions
-    (Section 9b) — this feeds the risk engine's evidence-strength axis
-    (Section 5).
-  * Dates are always ISO 8601 (YYYY-MM-DD), never MRZ's raw YYMMDD or any
-    other format (Section 13's #1 listed failure case).
-  * doc-type field layout comes from doc_types_config.json, not hardcoded
-    if/else branching (Section 11) — Modules 3/4/5/6 stay doc-type agnostic;
-    only Module 1 (and 2) branch on doc_type, and they do it via config.
+  * Never raise out of run_ocr() for a bad image — return status="failed"
+    instead (Section 9b / Section 13).
+  * Every extracted field carries a 0.0-1.0 confidence score, no
+    exceptions (Section 9b) — feeds the risk engine's evidence-strength
+    axis (Section 5).
+  * Dates are always ISO 8601 (YYYY-MM-DD), never MRZ's raw YYMMDD.
+  * doc-type field layout comes from config/doc_types_config.json via the
+    shared loader, not hardcoded if/else branching (Section 11) — and not
+    a locally-embedded duplicate copy.
 
-Optional dependencies (OpenCV is required; the OCR engines are optional and
-degrade gracefully so this module is importable/testable even before the
-team has installed the heavier CV stack — matching the Day 2 stub-first
-philosophy of Section 9a: the function signature and output shape are what
-matter first, real accuracy comes in after Day 3):
-  - opencv-python       (required for preprocessing)
-  - paddleocr / easyocr (either one, for visual-zone text)
-  - passporteye          (optional, for a purpose-built MRZ locator on TD3)
-  - pytesseract           (fallback OCR engine)
+Optional dependencies (OpenCV is required; OCR engines are optional and
+degrade gracefully so this module stays importable/testable even before
+the team has installed the heavier CV stack):
+  - opencv-python-headless (required for decode + preprocessing)
+  - paddleocr / easyocr    (either one, for visual-zone text)
+  - passporteye             (optional, purpose-built MRZ locator for TD3)
+  - pytesseract              (fallback OCR engine)
 """
 
 from __future__ import annotations
 
-import json
 import os
 import re
-from typing import Optional
+import tempfile
+from typing import List, Optional
 
 from .mrz_parser import parse_mrz, ParsedMRZ
 
@@ -52,6 +59,21 @@ try:
     _HAS_CV2 = True
 except ImportError:  # pragma: no cover - environment-dependent
     _HAS_CV2 = False
+
+try:
+    from ...preprocessing.image_preprocess import preprocess_for_ocr
+    _HAS_SHARED_PREPROCESSING = True
+except ImportError:  # pragma: no cover - environment-dependent
+    _HAS_SHARED_PREPROCESSING = False
+
+    def preprocess_for_ocr(image):
+        return image
+
+try:
+    from ..shared.doc_types_config_loader import load_doc_types_config
+except ImportError:  # pragma: no cover - environment-dependent
+    def load_doc_types_config():
+        return {}
 
 # Visual-zone OCR engine: try PaddleOCR first, then EasyOCR, then pytesseract.
 _OCR_ENGINE = None
@@ -80,74 +102,14 @@ try:
 except Exception:
     _HAS_PASSPORTEYE = False
 
-
-_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "doc_types_config.json")
 _MRZ_LINE_PATTERN = re.compile(r"^[A-Z0-9<]{20,44}$")
-
-
-def load_config(path: str = _CONFIG_PATH) -> dict:
-    """Load doc_types_config.json (Section 11) — the single source of truth
-    for per-doc-type field layout, MRZ format, and validation rules."""
-    with open(path, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-# ---------------------------------------------------------------------------
-# Preprocessing (Section 3: "Preprocessing: OpenCV deskew, perspective-
-# correct, glare normalize" — shared by every module that consumes the image)
-# ---------------------------------------------------------------------------
-
-def preprocess_image(image):
-    """Deskew, perspective-correct, and normalize contrast/glare.
-
-    Returns the processed image (numpy array), or the original image
-    unchanged if OpenCV isn't available or preprocessing fails — this must
-    never raise, since a bad/unusual image is exactly the case Module 1
-    has to handle gracefully (Section 4's edge cases: "imperfect phone-photo
-    captures").
-    """
-    if not _HAS_CV2 or image is None:
-        return image
-
-    try:
-        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY) if image.ndim == 3 else image.copy()
-
-        # Deskew via minAreaRect over thresholded text-like pixels.
-        thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)[1]
-        coords = cv2.findNonZero(thresh)
-        angle = 0.0
-        if coords is not None:
-            rect_angle = cv2.minAreaRect(coords)[-1]
-            angle = -(90 + rect_angle) if rect_angle < -45 else -rect_angle
-        (h, w) = gray.shape[:2]
-        center = (w // 2, h // 2)
-        rot_matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
-        deskewed = cv2.warpAffine(
-            image, rot_matrix, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE
-        )
-
-        # Glare / contrast normalization: CLAHE on the luminance channel.
-        lab = cv2.cvtColor(deskewed, cv2.COLOR_BGR2LAB) if deskewed.ndim == 3 else None
-        if lab is not None:
-            l_channel, a_channel, b_channel = cv2.split(lab)
-            clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
-            l_channel = clahe.apply(l_channel)
-            normalized = cv2.merge((l_channel, a_channel, b_channel))
-            normalized = cv2.cvtColor(normalized, cv2.COLOR_LAB2BGR)
-        else:
-            normalized = deskewed
-
-        return normalized
-    except Exception:
-        # Preprocessing must degrade, never break the pipeline (Section 13).
-        return image
 
 
 # ---------------------------------------------------------------------------
 # MRZ zone: locate + OCR + parse
 # ---------------------------------------------------------------------------
 
-def _ocr_text_lines(image) -> list[str]:
+def _ocr_text_lines(image) -> List[str]:
     """Run whichever OCR backend is available over an image crop and return
     a list of recognized text lines (best-effort, empty list on failure)."""
     if image is None or _OCR_BACKEND is None:
@@ -155,8 +117,7 @@ def _ocr_text_lines(image) -> list[str]:
     try:
         if _OCR_BACKEND == "paddleocr":
             result = _OCR_ENGINE.ocr(image, cls=True)
-            lines = [line[1][0] for block in result for line in block] if result else []
-            return lines
+            return [line[1][0] for block in result for line in block] if result else []
         if _OCR_BACKEND == "easyocr":
             result = _OCR_ENGINE.readtext(image, detail=0)
             return list(result)
@@ -171,7 +132,7 @@ def _ocr_text_lines(image) -> list[str]:
 def _mrz_confidence_from_backend(image) -> float:
     """Best-effort average confidence for the MRZ read. Falls back to a
     conservative default when the backend doesn't expose per-token scores —
-    Section 9b requires a confidence on every field, never omitted."""
+    every field needs a confidence, never omitted (Section 9b)."""
     if image is None or _OCR_BACKEND is None:
         return 0.5
     try:
@@ -190,24 +151,20 @@ def _mrz_confidence_from_backend(image) -> float:
 
 def extract_mrz(image, mrz_format: str) -> tuple[Optional[ParsedMRZ], float]:
     """Locate and OCR the MRZ band, then parse it structurally.
-
     Prefers PassportEye (purpose-built MRZ locator) for TD3 when available;
-    otherwise crops the bottom band of the image heuristically and OCRs it
-    with the general-purpose engine, splitting into MRZ-shaped lines.
-    Returns (ParsedMRZ or None, confidence).
-    """
+    otherwise crops the bottom band heuristically and OCRs it with the
+    general-purpose engine. Returns (ParsedMRZ or None, confidence)."""
     if mrz_format in (None, "none"):
         return None, 0.0
 
-    # Preferred path: PassportEye, purpose-built for TD3 MRZ localization.
     if _HAS_PASSPORTEYE and mrz_format in ("TD3", "TD3_or_none") and image is not None:
         try:
-            import tempfile
             with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
                 if _HAS_CV2:
                     cv2.imwrite(tmp.name, image)
-                mrz_obj = _passporteye_read_mrz(tmp.name)
-            os.unlink(tmp.name)
+                tmp_path = tmp.name
+            mrz_obj = _passporteye_read_mrz(tmp_path)
+            os.unlink(tmp_path)
             if mrz_obj is not None:
                 raw_text = mrz_obj.aux.get("text", "") if hasattr(mrz_obj, "aux") else ""
                 lines = [ln for ln in raw_text.splitlines() if ln.strip()]
@@ -219,17 +176,13 @@ def extract_mrz(image, mrz_format: str) -> tuple[Optional[ParsedMRZ], float]:
         except Exception:
             pass  # fall through to the generic crop-and-OCR path
 
-    # Fallback: heuristic bottom-band crop + generic OCR, then structural parse.
     if not _HAS_CV2 or image is None:
         return None, 0.0
     try:
         h, w = image.shape[:2]
-        # MRZ sits in roughly the bottom 20-25% of a well-cropped ID document.
-        band = image[int(h * 0.75):h, 0:w]
+        band = image[int(h * 0.75):h, 0:w]  # MRZ sits in roughly the bottom 20-25%
         raw_lines = _ocr_text_lines(band)
-        candidate_lines = [
-            re.sub(r"[^A-Z0-9<]", "", ln.upper()) for ln in raw_lines
-        ]
+        candidate_lines = [re.sub(r"[^A-Z0-9<]", "", ln.upper()) for ln in raw_lines]
         candidate_lines = [ln for ln in candidate_lines if _MRZ_LINE_PATTERN.match(ln)]
         if not candidate_lines:
             return None, 0.0
@@ -241,8 +194,7 @@ def extract_mrz(image, mrz_format: str) -> tuple[Optional[ParsedMRZ], float]:
 
 
 # ---------------------------------------------------------------------------
-# Generic visual-zone OCR (for driving_license/permit, and as a supplementary
-# text source used by the text/MRZ cross-check that Module 2 performs)
+# Generic visual-zone OCR
 # ---------------------------------------------------------------------------
 
 _LABEL_PATTERNS = {
@@ -254,6 +206,7 @@ _LABEL_PATTERNS = {
     "permit_number": r"(?:permit\s*(?:no\.?|number)?)\s*[:\-]?\s*([A-Z0-9\-]{5,20})",
     "visa_number": r"(?:visa\s*(?:no\.?|number)?)\s*[:\-]?\s*([A-Z0-9\-]{5,20})",
     "visa_type": r"(?:visa\s*type|type)\s*[:\-]?\s*([A-Z0-9\-]{1,15})",
+    "entry_validation": r"(?:entry\s*validation)\s*[:\-]?\s*([A-Z0-9\-/. ]{1,20})",
     "stay_duration": r"(?:stay|duration)\s*[:\-]?\s*(\d{1,4}\s*(?:days|months|years))",
     "nationality": r"(?:nationality)\s*[:\-]?\s*([A-Z]{2,20})",
     "gender": r"(?:sex|gender)\s*[:\-]?\s*([MF])",
@@ -271,7 +224,6 @@ def _normalize_date(raw: str) -> Optional[str]:
             parts = raw.split(sep)
             if len(parts) == 3:
                 a, b, c = parts
-                # Prefer the unambiguous YYYY-first case.
                 if len(a) == 4:
                     y, m, d = a, b, c
                 else:
@@ -286,12 +238,10 @@ def _normalize_date(raw: str) -> Optional[str]:
     return None
 
 
-def extract_generic_fields(image, expected_fields: list[str]) -> dict:
-    """Label-driven generic OCR extraction for doc types without a
-    fully-specified layout (Section 11: national_id/driving_license/permit
-    are 'secondary, generic-OCR-only'). Returns {field: {"value", "confidence"}}
-    only for fields it found — the caller fills in the rest as unreadable.
-    """
+def extract_generic_fields(image, expected_fields: List[str]) -> dict:
+    """Label-driven generic OCR extraction for fields not covered by MRZ
+    (or the primary source for doc types with mrz_format == 'none').
+    Returns {field: {"value", "confidence"}} only for fields it found."""
     out: dict = {}
     if image is None:
         return out
@@ -319,16 +269,15 @@ def extract_generic_fields(image, expected_fields: list[str]) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Top-level dispatcher — the single entry point every stub/real swap in
-# Section 9a's mock-first strategy must keep this exact signature.
+# Top-level dispatcher — signature routes.py actually calls:
+#     run_ocr(doc_bytes, doc_type)
 # ---------------------------------------------------------------------------
 
-def extract_ocr(image_path: str, doc_type: str, config: Optional[dict] = None) -> dict:
-    """Convert a document image into the Section 9b Module 1 output contract.
-
-    Never raises. On any failure returns status="failed" with empty
-    extracted_fields, per Section 9b/13 ("never throw an exception for a
-    bad image, return 'failed' instead").
+def run_ocr(doc_image_bytes: bytes, doc_type: str, config: Optional[dict] = None) -> dict:
+    """
+    Convert document image BYTES into the Section 9b Module 1 output
+    contract. Never raises. On any failure returns status="failed" with
+    empty extracted_fields (Section 9b/13).
     """
     result = {
         "module": "ocr_extraction",
@@ -338,7 +287,7 @@ def extract_ocr(image_path: str, doc_type: str, config: Optional[dict] = None) -
     }
 
     try:
-        cfg = config or load_config()
+        cfg = config or load_doc_types_config()
         doc_cfg = cfg.get(doc_type)
         if doc_cfg is None:
             return result  # unknown doc_type -> failed, don't guess
@@ -347,10 +296,11 @@ def extract_ocr(image_path: str, doc_type: str, config: Optional[dict] = None) -
         mrz_format = doc_cfg.get("mrz_format", "none")
 
         image = None
-        if _HAS_CV2 and os.path.exists(image_path):
-            image = cv2.imread(image_path)
+        if _HAS_CV2 and doc_image_bytes:
+            arr = np.frombuffer(doc_image_bytes, dtype=np.uint8)
+            image = cv2.imdecode(arr, cv2.IMREAD_COLOR)
         if image is not None:
-            image = preprocess_image(image)
+            image = preprocess_for_ocr(image)
 
         extracted: dict = {}
         mrz_raw = None
@@ -363,17 +313,12 @@ def extract_ocr(image_path: str, doc_type: str, config: Optional[dict] = None) -
                 for fname in expected_fields:
                     mrz_field = parsed_mrz.fields.get(fname)
                     if mrz_field is not None and mrz_field.value:
-                        extracted[fname] = {
-                            "value": mrz_field.value,
-                            "confidence": round(mrz_conf, 2),
-                        }
+                        extracted[fname] = {"value": mrz_field.value, "confidence": round(mrz_conf, 2)}
 
-        # 2) Generic visual-zone OCR fills in whatever the MRZ pass missed
-        #    (or is the primary source when mrz_format == "none").
+        # 2) Generic visual-zone OCR fills in whatever the MRZ pass missed.
         missing_fields = [f for f in expected_fields if f not in extracted]
         if missing_fields and image is not None:
-            generic = extract_generic_fields(image, missing_fields)
-            extracted.update(generic)
+            extracted.update(extract_generic_fields(image, missing_fields))
 
         result["extracted_fields"] = extracted
         if mrz_raw is not None:
@@ -391,7 +336,9 @@ def extract_ocr(image_path: str, doc_type: str, config: Optional[dict] = None) -
         return result
 
     except Exception:
-        # Absolute last resort — the one rule this module cannot break.
         result["status"] = "failed"
         result["extracted_fields"] = {}
         return result
+
+if __name__ == "__main__":
+    pass
