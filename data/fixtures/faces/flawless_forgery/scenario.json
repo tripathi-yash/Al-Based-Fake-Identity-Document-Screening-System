@@ -1,0 +1,13 @@
+{
+  "scenario_name": "flawless_forgery_own_face_swap",
+  "description": "Document claims identity ANOOP (F1000001) but the photo has been swapped to ASHRAY (the forger). The forger presents his own live selfie at the checkpoint.",
+  "forged_document_file": "flawless_forgery/forged_document.jpg",
+  "live_selfie_file": "flawless_forgery/live_selfie_presented.jpg",
+  "claimed_identity": "anoop",
+  "claimed_passport_number": "F1000001",
+  "actual_person_in_photo": "ashray",
+  "expected_module2_result": "checksum_pass=true, db_status=clear (document itself is not flagged - that's the whole point)",
+  "expected_module4_result": "match (forger IS the person in the swapped photo - Module 4 alone is fooled)",
+  "expected_module5_result": "mismatch (document photo does not match the authority reference for F1000001, which is ANOOP's real face, not ASHRAY's)",
+  "authority_reference_used": "data/fixtures/faces/matched/anoop_selfie.jpg (via Mock DB 2, key F1000001)"
+}
