@@ -1,4 +1,20 @@
 """
+# NOTE: this module deliberately applies NO preprocessing from
+# backend/preprocessing/image_preprocess.py — neither normalize_contrast()
+# NOR correct_geometry(). Two independent reasons:
+#   1. Forensic risk: normalize_contrast() rewrites pixel intensities
+#      directly, which would corrupt ELA's recompression-artifact signal.
+#      correct_geometry() uses interpolation-based resampling (cv2.warpAffine
+#      with INTER_CUBIC), which is gentler but still not strictly
+#      pixel-value-preserving — same category of risk, smaller magnitude.
+#   2. No functional benefit: ELA has no orientation dependency, SIFT-based
+#      copy-move detection is rotation-invariant by design, and ManTraNet
+#      has no geometry-normalization assumption baked in. Unlike Module 1
+#      (where deskewing measurably improves OCR) or Module 4/5 (where glare
+#      normalization measurably reduces face-detection failures), there is
+#      no accuracy upside here to weigh against the forensic risk.
+# This module intentionally operates on raw uploaded bytes, untouched.
+
 Module 3 combiner — real implementation, replaces stub.py from Day 3+
 onward. Same function signature/schema as stub.py's run_tampering_detection.
 
