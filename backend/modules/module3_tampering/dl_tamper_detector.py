@@ -17,7 +17,7 @@ this file):
 
     cd backend/modules/module3_tampering
     git clone https://github.com/RonyAbecidan/ManTraNet-pytorch.git mantranet_lib
-    pip install torch torchvision opencv-python pillow numpy
+    pip install torch torchvision opencv-python pillow numpy scipy
 
   Then follow that repo's README / demo.ipynb to download the pretrained
   weights file (MantraNetv4.pt) into mantranet_lib/MantraNet/.
@@ -32,6 +32,19 @@ this file):
   mantranet_lib/ is vendored, third-party code — do not edit it directly,
   and add it to .gitignore if its weights file is large (it will be).
 ─────────────────────────────────────────────────────────────────────────
+
+AGGREGATION — UPDATED (Step 2 of the gated Module 3 fix sequence):
+Whole-image 90th-percentile aggregation is mathematically guaranteed to
+sample clean background pixels whenever a tampered patch covers less
+than ~10% of the image area. Confirmed on real fixtures: a photo-swap
+covering 7.08% of the image produced dl_tamper_probability=0.078 despite
+the heatmap peaking at 0.918 *inside* the swapped region — the
+percentile diluted the localized signal into the clean baseline.
+
+Fixed by: thresholding the heatmap, finding connected regions of
+elevated activation, discarding regions too small to be meaningful
+(noise filter), and scoring by the strongest surviving region's mean
+activation instead of a whole-image percentile.
 """
 import io
 import os
@@ -39,6 +52,7 @@ import numpy as np
 from PIL import Image
 import tempfile
 import torch
+from scipy import ndimage
 
 import gc # Added for active RAM reclamation
 
@@ -53,7 +67,14 @@ _WEIGHTS_PATH = os.path.join(
 )
 
 # Max target dimension to keep 8GB RAM systems from freezing/swapping
-MAX_INFERENCE_DIM = 768  
+MAX_INFERENCE_DIM = 768
+
+# --- Localized aggregation config (Step 2 fix) ---
+# Starting points — tune against real fixture heatmap distributions if
+# a fixture is still misclassified, don't assume these are final.
+_HEATMAP_ACTIVATION_THRESHOLD = 0.5   # pixel counted as "suspicious" above this
+_MIN_COMPONENT_AREA_FRACTION = 0.005  # discard connected regions smaller than ~0.5% of image area (noise filter)
+
 
 def _load_model():
     global _MODEL
@@ -82,12 +103,37 @@ def _load_model():
 
     return _MODEL
 
+
+def _aggregate_localized_score(heatmap_arr: np.ndarray) -> float:
+    """
+    Step 2 fix: connected-component aggregation instead of whole-image
+    percentile. Returns 0.0 if no component survives the minimum-area
+    filter (i.e. only noise-level activation present, no localized
+    forgery region detected).
+    """
+    binary_mask = heatmap_arr >= _HEATMAP_ACTIVATION_THRESHOLD
+    labeled_array, num_features = ndimage.label(binary_mask)
+    min_area_px = _MIN_COMPONENT_AREA_FRACTION * heatmap_arr.size
+
+    component_scores = []
+    for label_id in range(1, num_features + 1):
+        component_mask = labeled_array == label_id
+        if component_mask.sum() < min_area_px:
+            continue
+        component_scores.append(float(heatmap_arr[component_mask].mean()))
+
+    if not component_scores:
+        return 0.0
+    return float(np.clip(max(component_scores), 0.0, 1.0))
+
+
 def detect_tampering_dl(image_bytes: bytes) -> dict:
     """
     Optimized for 8GB RAM / CPU-only execution profiles.
     Downamples target images and restricts core thread utilization.
     Returns:
       - dl_tamper_probability: 0.0-1.0, aggregate forgery likelihood
+        (localized connected-component score — see module docstring)
       - dl_heatmap: numpy array (H x W), per-pixel forgery likelihood,
         for the dashboard's tamper heatmap visualization
     Raises on failure (missing weights, import error) — the caller
@@ -125,19 +171,15 @@ def detect_tampering_dl(image_bytes: bytes) -> dict:
         mask_img = mask_img.resize((orig_w, orig_h), Image.Resampling.BILINEAR)
         heatmap_arr = np.array(mask_img, dtype=np.float32) / 255.0
 
-    # Aggregation rule: 90th percentile isolates localized forgery zones
-    dl_tamper_probability = float(np.clip(np.percentile(heatmap_arr, 90), 0.0, 1.0))
+    # CHANGED (Step 2): connected-component localized aggregation
+    # replaces whole-image 90th percentile — see module docstring and
+    # _aggregate_localized_score() for the full rationale.
+    dl_tamper_probability = _aggregate_localized_score(heatmap_arr)
 
     # Explicit garbage collection to flush deep model reference graphs from RAM
     del im
     del final_output
     gc.collect()
-
-    # Aggregate to a single probability. A simple mean is a reasonable
-    # starting point; consider using the 90th-percentile pixel value
-    # instead once you have real fixtures, since a small tampered region
-    # in an otherwise clean image should not be diluted by averaging
-    # across the whole (mostly clean) image.
 
     return {
         "dl_tamper_probability": dl_tamper_probability,
@@ -149,7 +191,6 @@ if __name__ == "__main__":
     import time
 
     start_time = time.perf_counter()
-    import matplotlib.pyplot as plt
     example_path = os.path.join(
         os.path.dirname(__file__),
         "mantranet_lib",
@@ -168,28 +209,22 @@ if __name__ == "__main__":
     print("Heatmap min:", result["dl_heatmap"].min())
     print("Heatmap max:", result["dl_heatmap"].max())
 
-    # Load the actual image array for rendering (instead of passing the string path)
     orig_img = Image.open(example_path).convert("RGB")
     orig_arr = np.array(orig_img)
 
     plt.figure(figsize=(12, 4))
 
-    # Subplot 1: Render the raw input image
     plt.subplot(1, 3, 1)
     plt.imshow(orig_arr)
     plt.title('Original image')
 
-    # Subplot 2: Render the prediction mask
     plt.subplot(1, 3, 2)
     plt.imshow(result["dl_heatmap"], cmap='gray', vmin=0.0, vmax=1.0)
     plt.title('Predicted forgery mask')
-    
-    # Subplot 3: Fix tensor vs numpy method chaining bug
+
     plt.subplot(1, 3, 3)
-    # Expand dims along axis 2 to match (H, W, 1) for broadcasting against (H, W, 3)
     binary_mask = (result["dl_heatmap"] > 0.2)[:, :, np.newaxis]
     suspicious_regions = orig_arr * binary_mask
-    
     plt.imshow(suspicious_regions.astype(np.uint8))
     plt.title('Suspicious regions detected')
 
@@ -198,4 +233,3 @@ if __name__ == "__main__":
 
     end_time = time.perf_counter()
     print(f"time : {end_time - start_time}:2f")
-

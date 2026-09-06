@@ -119,13 +119,31 @@ def normalize_contrast(image):
 
 
 def preprocess_for_ocr(image):
-    """Convenience wrapper for Module 1: geometry correction + contrast
-    normalization, since both are safe and beneficial for OCR readability."""
-    return normalize_contrast(correct_geometry(image))
+    # old code  
+    # """Convenience wrapper for Module 1: geometry correction + contrast
+    # normalization, since both are safe and beneficial for OCR readability."""
+
+    """Safe OCR preprocessing.
+
+    Geometry correction is intentionally disabled until a reliable
+    document-boundary detector is available. Contrast normalization
+    preserves the full document frame.
+    """
+    return normalize_contrast(image)
+    # return normalize_contrast(correct_geometry(image))
 
 
 def preprocess_for_face_detection(image):
-    """Convenience wrapper for Module 4/5: same two steps as OCR, since
-    neither harms face-embedding extraction and glare normalization can
-    reduce false no_face_detected results on poorly-lit document photos."""
-    return normalize_contrast(correct_geometry(image))
+    # old code
+    # """Convenience wrapper for Module 4/5: same two steps as OCR, since
+    # neither harms face-embedding extraction and glare normalization can
+    # reduce false no_face_detected results on poorly-lit document photos."""
+    # return normalize_contrast(correct_geometry(image))
+
+    """Safe preprocessing.
+    
+        Geometry correction is intentionally disabled until a reliable
+        document-boundary detector is available. Contrast normalization
+        preserves the full document frame.
+        """
+    return normalize_contrast(image)

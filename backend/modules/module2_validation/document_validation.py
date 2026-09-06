@@ -297,3 +297,27 @@ def run_validation(ocr_result: Dict[str, Any], doc_type: Optional[str] = None) -
     doc_type accepted for call-signature compatibility; not required
     internally since document_validation() reads it from ocr_result."""
     return document_validation(ocr_result)
+
+if __name__ == "__main__":
+
+    import os
+    from backend.modules.module1_ocr.ocr_extraction import run_ocr
+
+    IMAGE_PATH = os.path.join(
+        os.path.dirname(__file__),
+        "..", "..", "..",
+        "data", "fixtures", "clean",
+        "clean_passport_01.jpg"
+    )
+
+    print("Debug : ", IMAGE_PATH)
+
+    with open(IMAGE_PATH, "rb") as file:
+        doc_bytes = file.read()
+        
+    ocr_result = run_ocr(doc_bytes, "passport")
+    print("Debug : ", ocr_result)
+
+    validation_result = run_validation(ocr_result, "passport")
+
+    print(validation_result) 

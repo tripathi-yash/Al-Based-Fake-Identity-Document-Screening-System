@@ -4,8 +4,16 @@
   "tamper_type": "photo_swap",
   "based_on": "clean_passport_01.jpg",
   "linked_db_id": "N1234567",
-  "what_was_changed": "Photo placeholder region overwritten with a different fill/text, image re-saved (double JPEG compression).",
+  "what_was_changed": "Portrait region (40, 90, 240, 320) replaced with a real, different person's face photo (yash.jpg), resized/center-cropped to fit, then re-saved at JPEG quality=85 (double compression vs. the clean original).",
+  "source_region": null,
+  "target_region": [
+    40,
+    90,
+    240,
+    320
+  ],
   "expected_module3_result": true,
   "expected_module2_result": "checksum_pass=true (MRZ untouched)",
-  "expected_module4_result": "no_face_detected (no real face in either version)"
+  "expected_module4_result": "mismatch (document photo is now a different real face than the live selfie)",
+  "expected_module5_result": "mismatch (swapped photo no longer matches mock_db2's authority-original photo for this passport number)"
 }

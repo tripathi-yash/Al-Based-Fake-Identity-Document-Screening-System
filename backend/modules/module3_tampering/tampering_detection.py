@@ -18,18 +18,35 @@
 Module 3 combiner — real implementation, replaces stub.py from Day 3+
 onward. Same function signature/schema as stub.py's run_tampering_detection.
 
-FUSION LOGIC (this is the architectural decision from the Module 3
-critique — see docs/module3_architecture_update.md for the full rationale):
+FUSION LOGIC — UPDATED (Step 3 of the gated Module 3 fix sequence):
 
-  - ManTraNet (DL) is the PRIMARY signal.
+  - A RANSAC-verified, RIGID-transform copy-move match (copy_move.py,
+    post Step-1 fix: constrained to cv2.estimateAffinePartial2D instead
+    of unconstrained homography) is now checked FIRST and independently
+    sets tamper_verdict="tampered". This is the same non-diluting-floor
+    principle risk_engine/scoring.py already applies to Module 5/6b — a
+    confident, geometrically-verified signal must not be silently
+    outvoted by an average or vetoed by a low DL score.
+
+    This reordering is only safe because Step 1 eliminated the false-
+    positive source (unconstrained homography fitting repeated MRZ/text
+    glyphs) that previously made copy_move_flag unreliable on clean
+    documents (it was firing at 89 inliers on the untampered fixture
+    before Step 1; confirm this is no longer the case on your fixtures
+    before trusting this ordering).
+
+  - ManTraNet (DL) remains the PRIMARY signal for everything copy-move
+    does NOT independently confirm.
       dl_probability >= high_threshold  -> tampered, high confidence
       dl_probability <= low_threshold   -> clean, high confidence
       in between                        -> BORDERLINE: consult supporting evidence
 
-  - ELA / EXIF / copy-move NEVER get veto power over a confident DL
-    verdict. They only resolve borderline DL scores, and if the DL model
-    fails to load, they still produce a verdict together (evidence
-    strength is lowered accordingly, never silently "clean").
+  - ELA / EXIF still never get independent veto/confirm power on their
+    own — they only resolve borderline DL scores (support_hits >= 2),
+    same as before. Only copy_move_flag was promoted to an independent
+    floor, because it's the only one of the three supporting signals
+    that produces a RANSAC-verified geometric guarantee rather than a
+    soft statistical threshold.
 
   - The output always includes a `tamper_verdict` of "tampered", "clean",
     or "uncertain" — never a forced binary when the evidence doesn't
@@ -69,7 +86,18 @@ def run_tampering_detection(doc_image_bytes: bytes) -> dict:
 
     ela_result = compute_ela(doc_image_bytes, thresholds.get("ela_quality_resave", 90))
     exif_result = check_exif(doc_image_bytes)
-    copy_move_result = detect_copy_move(doc_image_bytes)
+
+    # NOTE: border_margin_px removed from this call — copy_move.py's
+    # Step-1 fix replaced border-masking with a rigid-transform
+    # constraint (cv2.estimateAffinePartial2D) that no longer takes a
+    # border_margin_px parameter. Passing it now would raise TypeError.
+    copy_move_result = detect_copy_move(
+        doc_image_bytes,
+        ratio_thresh=thresholds.get("copy_move_ratio_thresh", 0.75),
+        min_spatial_distance_px=thresholds.get("copy_move_min_spatial_distance_px", 20),
+        ransac_reproj_thresh=thresholds.get("copy_move_ransac_reproj_thresh", 5.0),
+        min_inliers_to_flag=thresholds.get("copy_move_min_inliers_to_flag", 8),
+    )
 
     support_hits = sum(
         [
@@ -79,7 +107,14 @@ def run_tampering_detection(doc_image_bytes: bytes) -> dict:
         ]
     )
 
-    if dl_available:
+    # CHANGED (Step 3): a verified rigid copy-move match is checked
+    # FIRST and independently confirms tampering — see module docstring
+    # for the full rationale and why this reordering is safe post Step 1.
+    if copy_move_result["copy_move_flag"]:
+        tamper_verdict = "tampered"
+        overall_flag = True
+        supporting_flags.append("copy_move_verified_duplicate_region")
+    elif dl_available:
         high = thresholds.get("dl_high_confidence_threshold", 0.7)
         low = thresholds.get("dl_low_confidence_threshold", 0.3)
 
@@ -125,19 +160,18 @@ def run_tampering_detection(doc_image_bytes: bytes) -> dict:
 
 if __name__ == "__main__":
     import os
-    import matplotlib.pyplot as plt
 
     example_path = os.path.join(
-        os.path.dirname(__file__),
-        "mantranet_lib",
-        "Demo_images",
-        "example4.jpg"
+        os.path.dirname(__file__), "..", "..", "..",
+        "data",
+        "fixtures",
+        "tampered",
+        "tampered_01_photo_swap.jpg"
     )
 
-    with open(example_path, "rb" ) as file:
+    with open(example_path, "rb") as file:
         image_bytes = file.read()
 
     result = run_tampering_detection(doc_image_bytes=image_bytes)
 
     print(result)
-

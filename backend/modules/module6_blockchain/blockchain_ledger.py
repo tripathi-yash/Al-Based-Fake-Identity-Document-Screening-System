@@ -78,16 +78,16 @@ def write_ledger_record(
 
 if __name__ == "__main__":
     import os
-    from ..module1_ocr.stub import run_ocr
-    from ..module2_validation.stub import run_validation
+    from ..module1_ocr.ocr_extraction import run_ocr
+    from ..module2_validation.document_validation import run_validation
     from ..module3_tampering.tampering_detection import run_tampering_detection
     from ..module4_face.face_verification import run_face_verification
     from ..module5_authority_match.authority_match import run_authority_match
     from ...risk_engine.scoring import compute_risk_score
 
-    doc_type = None
+    doc_type = "passport"
     IMAGE_PATH = os.path.join(
-        os.path.dirname(__file__), "..", "..", "..", "data", "fixtures", "clean", "student_id.jpg"
+        os.path.dirname(__file__), "..", "..", "..", "data", "fixtures", "tampered", "tampered_01_photo_swap.jpg"
     )
 
     with open(IMAGE_PATH, "rb") as file:
@@ -103,8 +103,8 @@ if __name__ == "__main__":
 
     # Module 5: doc photo vs authority mock DB record — separate call,
     # was imported but never actually invoked before
-    fake_ocr_result = {"extracted_fields": {"passport_number": {"value": "P1234567"}}}
-    authority_result = run_authority_match(fake_ocr_result, image_bytes)
+    # fake_ocr_result = {"extracted_fields": {"passport_number": {"value": "P1234567"}}}
+    authority_result = run_authority_match(ocr_result, image_bytes)
 
     risk_result = compute_risk_score(validation_result, tamper_result, face_result, authority_result)
 

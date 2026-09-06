@@ -4,8 +4,14 @@
   "tamper_type": "dob_alter",
   "based_on": "clean_passport_01.jpg",
   "linked_db_id": "N1234567",
-  "what_was_changed": "Printed Date of Birth overwritten to '1990-01-01'. MRZ line (still says 2003-08-15) was NOT updated -- deliberate text/MRZ mismatch.",
+  "what_was_changed": "Printed DOB value region (520, 700, 250, 275) overwritten with '1990-01-01'. MRZ line 2 (which still encodes the original 2003-08-15) was NOT modified \u2014 this is a text-vs-MRZ inconsistency, a Module 2 catch, not a Module 3 catch.",
+  "source_region": null,
+  "target_region": [
+    520,
+    250,
+    700,
+    275
+  ],
   "expected_module3_result": false,
-  "expected_module2_result": "checksum_pass=true, text_mrz_match=false -- THIS is the catch",
-  "expected_module4_result": "no_face_detected (no real face in either version)"
+  "expected_module2_result": "text_mrz_mismatch_dob in flags; checksum_pass=true"
 }

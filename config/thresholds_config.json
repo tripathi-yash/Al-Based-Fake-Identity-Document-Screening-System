@@ -21,6 +21,7 @@
     "ela_clarity_low_threshold": 0.4,
 
     "copy_move_ratio_thresh": 0.75,
+    "copy_move_border_margin_px": 30,
     "copy_move_min_spatial_distance_px": 20,
     "copy_move_ransac_reproj_thresh": 5.0,
     "copy_move_min_inliers_to_flag": 8,

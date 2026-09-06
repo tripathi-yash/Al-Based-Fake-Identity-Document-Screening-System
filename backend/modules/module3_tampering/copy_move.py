@@ -1,26 +1,32 @@
 """
-Copy-move forgery detection via SIFT self-matching — SUPPORTING evidence only.
+copy_move.py — UPDATED (Step 1 of the gated Module 3 fix sequence).
 
-This is deliberately NOT a naive "count similar keypoints" implementation.
-Documents legitimately contain repeated visual patterns (security textures,
-borders, repeated glyphs, seals) — a naive matcher flags these as false
-positives. This implementation follows the pipeline recommended in the
-critique document:
+CHANGE FROM ORIGINAL: cv2.findHomography (unconstrained, 8 degrees of
+freedom: full perspective) replaced with cv2.estimateAffinePartial2D
+(rigid: rotation + uniform scale + translation only, 4 DOF).
 
-    SIFT keypoints -> ratio test -> spatial-distance filter ->
-    RANSAC geometric consistency -> confidence
+EVIDENCE (from the confirmed diagnostic on the real fixtures):
+  clean_passport_01.jpg (untampered) was producing 89 "geometric
+  inliers" under unconstrained homography — a false positive. Repeated
+  MRZ filler characters ('<'), repeated glyphs, and straight border
+  lines can satisfy a full 8-DOF perspective transform far more easily
+  than they can satisfy a rigid, scale-locked transform.
 
-A genuine copy-paste produces many keypoint matches that agree on ONE
-consistent transform (e.g. "everything shifted +100px horizontally").
-Random legitimate similarity (e.g. a repeated security pattern) produces
-matches with NO consistent transform. RANSAC is what tells these apart.
+RATIONALE: a genuine copy-paste within the SAME document page is
+physically a rigid move — it never undergoes perspective distortion,
+since it's the same flat image copied to a new (x,y) offset, not
+photographed from a different angle. Constraining the transform to
+rigid removes the main source of false-positive matches on repeated
+text/borders while a real duplicated region (e.g. a cloned stamp) still
+satisfies it perfectly, since it too is a pure translation/rotation of
+identical pixels.
 
-Vulnerability, stated honestly (say this if asked in Q&A):
-This only catches duplication WITHIN the same image. A forger who
-generates new content instead of copy-pasting existing content (e.g.
-typing new text rather than cloning a digit) produces nothing for this
-detector to find — that's a gap this technique cannot close by design,
-which is exactly why the DL detector is the primary signal, not this.
+GATE BEFORE PROCEEDING TO STEP 2: after this change, re-run the 3-fixture
+diagnostic (clean / photo_swap / stamp_clone). Confirm clean's
+geometric_inliers drops well below copy_move_min_inliers_to_flag (8)
+before touching dl_tamper_detector.py. If it does NOT drop enough,
+STOP — report the actual numbers, do not raise the threshold to force
+a pass.
 """
 import io
 import cv2
@@ -46,9 +52,6 @@ def detect_copy_move(
         return {"copy_move_flag": False, "match_count": 0, "geometric_inliers": 0}
 
     bf = cv2.BFMatcher()
-    # k=3: self-matching means each descriptor's closest match is itself
-    # (distance 0) — we need the 2nd and 3rd nearest neighbors for a
-    # meaningful ratio test against genuinely DIFFERENT keypoints.
     raw_matches = bf.knnMatch(descriptors, descriptors, k=3)
 
     good_matches = []
@@ -56,14 +59,9 @@ def detect_copy_move(
         if len(m) < 3:
             continue
         _self, candidate, runner_up = m
-        # Lowe's ratio test, applied to the 2nd/3rd neighbor since the
-        # 1st is always the trivial self-match
         if candidate.distance < ratio_thresh * runner_up.distance:
             pt_a = np.array(keypoints[candidate.queryIdx].pt)
             pt_b = np.array(keypoints[candidate.trainIdx].pt)
-            # discard matches to spatially-adjacent keypoints — these are
-            # just neighboring detections on the same real feature, not
-            # evidence of duplication elsewhere in the image
             if np.linalg.norm(pt_a - pt_b) > min_spatial_distance_px:
                 good_matches.append(candidate)
 
@@ -81,14 +79,13 @@ def detect_copy_move(
         [keypoints[m.trainIdx].pt for m in good_matches]
     ).reshape(-1, 1, 2)
 
-    homography, inlier_mask = cv2.findHomography(
-        src_pts, dst_pts, cv2.RANSAC, ransac_reproj_thresh
+    # CHANGED: rigid transform instead of unconstrained homography — see
+    # module docstring for the evidence/rationale.
+    transform, inlier_mask = cv2.estimateAffinePartial2D(
+        src_pts, dst_pts, method=cv2.RANSAC, ransacReprojThreshold=ransac_reproj_thresh
     )
     geometric_inliers = int(inlier_mask.sum()) if inlier_mask is not None else 0
 
-    # Only flag if a SINGLE consistent transform explains a meaningful
-    # number of matches — this is what distinguishes real copy-move from
-    # scattered coincidental similarity across a repeated pattern.
     flag = geometric_inliers >= min_inliers_to_flag
 
     return {
@@ -97,22 +94,13 @@ def detect_copy_move(
         "geometric_inliers": geometric_inliers,
     }
 
+
 if __name__ == "__main__":
     import os
-    
 
     example_path = os.path.join(
-        os.path.dirname(__file__),
-        "mantranet_lib",
-        "Demo_images",
-        "example.png"
+        os.path.dirname(__file__), "mantranet_lib", "Demo_images", "example.png"
     )
-
-    with open(example_path, "rb" ) as file:
+    with open(example_path, "rb") as file:
         image_bytes = file.read()
-
     print(detect_copy_move(image_bytes=image_bytes))
-
-    
-
-    

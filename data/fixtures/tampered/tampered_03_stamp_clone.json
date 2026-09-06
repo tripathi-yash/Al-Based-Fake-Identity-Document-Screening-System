@@ -4,7 +4,19 @@
   "tamper_type": "stamp_clone",
   "based_on": "clean_passport_01.jpg",
   "linked_db_id": "N1234567",
-  "what_was_changed": "Region (270, 90, 850, 130) duplicated and pasted at (270, 420) -- simulates copy-move/cloned stamp forgery.",
+  "what_was_changed": "clean_passport_01.jpg contains no real stamp/seal, so a synthetic official seal was first drawn at (660, 380, 900, 500). That exact region was then cropped and duplicated at (40, 350, 280, 470) (resized to fit), simulating a copy-move forgery of an official seal. The original seal remains in place at its original location \u2014 this is NOT a replace-and-delete edit.",
+  "source_region": [
+    660,
+    380,
+    900,
+    500
+  ],
+  "target_region": [
+    40,
+    350,
+    280,
+    470
+  ],
   "expected_module3_result": true,
   "expected_module2_result": "checksum_pass=true (MRZ untouched)",
   "expected_module4_result": "no_face_detected (no real face in either version)"
