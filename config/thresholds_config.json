@@ -25,9 +25,10 @@
     "copy_move_min_spatial_distance_px": 20,
     "copy_move_ransac_reproj_thresh": 5.0,
     "copy_move_min_inliers_to_flag": 8,
-    "_copy_move_note": "Tune min_inliers_to_flag against data/fixtures/clean/ (should stay False, even with repeated patterns like security textures) and data/fixtures/tampered/ (should flip True on genuine stamp/region duplication)."
-  },
-
+    "copy_move_max_cluster_diagonal_fraction": 0.18,
+    "_copy_move_note": "Tune min_inliers_to_flag against data/fixtures/clean/... [existing text] ... max_cluster_diagonal_fraction is the Step 1b fix: rejects inlier clusters spread across more than this fraction of the image diagonal, since a genuine copy-move forgery duplicates one localized patch, while repeated font glyphs on different text lines scatter across much of the page despite sharing one rigid transform."
+},
+  
   "identity_reuse_detection": {
     "similarity_threshold": 0.6,
     "_note": "cosine similarity above this = same face flagged as reused, when paired with a DIFFERENT declared identity/doc number (see module6_blockchain/identity_reuse.py). Same convention as face_verification. Was previously hardcoded in identity_reuse.py - that file must be updated to load this value from here instead of the literal 0.6."

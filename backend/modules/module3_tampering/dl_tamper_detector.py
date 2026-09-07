@@ -73,7 +73,7 @@ MAX_INFERENCE_DIM = 768
 # Starting points — tune against real fixture heatmap distributions if
 # a fixture is still misclassified, don't assume these are final.
 _HEATMAP_ACTIVATION_THRESHOLD = 0.5   # pixel counted as "suspicious" above this
-_MIN_COMPONENT_AREA_FRACTION = 0.005  # discard connected regions smaller than ~0.5% of image area (noise filter)
+_MIN_COMPONENT_AREA_FRACTION = 0.001  # discard connected regions smaller than ~0.5% of image area (noise filter)
 
 
 def _load_model():
@@ -152,6 +152,15 @@ def detect_tampering_dl(image_bytes: bytes) -> dict:
         scale = MAX_INFERENCE_DIM / max(orig_w, orig_h)
         new_w = int(orig_w * scale)
         new_h = int(orig_h * scale)
+        # FIX: confirmed crash — ManTraNet's internal pooling stack throws
+        # "output size too small" on certain odd dimensions (e.g. 499px
+        # height -> negative intermediate layer size). Rounding both dims
+        # to the nearest multiple of 32 is the standard fix for CNNs with
+        # multiple stride-2 pooling layers. HYPOTHESIS, not confirmed
+        # against ManTraNet's actual source — verify this resolves it
+        # before trusting it.
+        new_w = max(32, round(new_w / 32) * 32)
+        new_h = max(32, round(new_h / 32) * 32)
         img = img.resize((new_w, new_h), Image.Resampling.BILINEAR)
 
     # Transform image into standard tensor format
@@ -193,9 +202,13 @@ if __name__ == "__main__":
     start_time = time.perf_counter()
     example_path = os.path.join(
         os.path.dirname(__file__),
-        "mantranet_lib",
-        "Demo_images",
-        "example.png"
+        "..",
+        "..",
+        ".."
+        "data",
+        "fixtures",
+        "tampered",
+        "tampered_01_photo_swap.jpg"
     )
     with open(example_path, "rb") as file:
         image_bytes = file.read()

@@ -22,18 +22,20 @@ FUSION LOGIC — UPDATED (Step 3 of the gated Module 3 fix sequence):
 
   - A RANSAC-verified, RIGID-transform copy-move match (copy_move.py,
     post Step-1 fix: constrained to cv2.estimateAffinePartial2D instead
-    of unconstrained homography) is now checked FIRST and independently
-    sets tamper_verdict="tampered". This is the same non-diluting-floor
-    principle risk_engine/scoring.py already applies to Module 5/6b — a
-    confident, geometrically-verified signal must not be silently
-    outvoted by an average or vetoed by a low DL score.
+    of unconstrained homography, PLUS Step-1b spatial compactness filter
+    that rejects scattered repeated-font-glyph false positives) is now
+    checked FIRST and independently sets tamper_verdict="tampered". This
+    is the same non-diluting-floor principle risk_engine/scoring.py
+    already applies to Module 5/6b — a confident, geometrically-verified
+    signal must not be silently outvoted by an average or vetoed by a
+    low DL score.
 
-    This reordering is only safe because Step 1 eliminated the false-
-    positive source (unconstrained homography fitting repeated MRZ/text
-    glyphs) that previously made copy_move_flag unreliable on clean
-    documents (it was firing at 89 inliers on the untampered fixture
-    before Step 1; confirm this is no longer the case on your fixtures
-    before trusting this ordering).
+    This reordering is only safe because Step 1 + Step 1b eliminated the
+    two confirmed false-positive sources on the clean fixture (89
+    inliers from unconstrained homography fitting repeated MRZ/text
+    glyphs, then 59 inliers from repeated font glyphs across text lines
+    satisfying a rigid transform at consistent line-spacing) — confirm
+    both are resolved on your fixtures before trusting this ordering.
 
   - ManTraNet (DL) remains the PRIMARY signal for everything copy-move
     does NOT independently confirm.
@@ -91,12 +93,19 @@ def run_tampering_detection(doc_image_bytes: bytes) -> dict:
     # Step-1 fix replaced border-masking with a rigid-transform
     # constraint (cv2.estimateAffinePartial2D) that no longer takes a
     # border_margin_px parameter. Passing it now would raise TypeError.
+    #
+    # NEW (Step 1b): max_cluster_diagonal_fraction now wired from config
+    # instead of relying on copy_move.py's hardcoded default — controls
+    # how spread out inlier keypoints can be before being rejected as a
+    # likely repeated-pattern false positive rather than a genuine
+    # localized duplicated region.
     copy_move_result = detect_copy_move(
         doc_image_bytes,
         ratio_thresh=thresholds.get("copy_move_ratio_thresh", 0.75),
         min_spatial_distance_px=thresholds.get("copy_move_min_spatial_distance_px", 20),
         ransac_reproj_thresh=thresholds.get("copy_move_ransac_reproj_thresh", 5.0),
         min_inliers_to_flag=thresholds.get("copy_move_min_inliers_to_flag", 8),
+        max_cluster_diagonal_fraction=thresholds.get("copy_move_max_cluster_diagonal_fraction", 0.30),
     )
 
     support_hits = sum(
@@ -109,7 +118,7 @@ def run_tampering_detection(doc_image_bytes: bytes) -> dict:
 
     # CHANGED (Step 3): a verified rigid copy-move match is checked
     # FIRST and independently confirms tampering — see module docstring
-    # for the full rationale and why this reordering is safe post Step 1.
+    # for the full rationale and why this reordering is safe post Step 1/1b.
     if copy_move_result["copy_move_flag"]:
         tamper_verdict = "tampered"
         overall_flag = True
