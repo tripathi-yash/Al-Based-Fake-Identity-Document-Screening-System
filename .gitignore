@@ -32,7 +32,7 @@ backend/uploads/
 .idea/
 
 # vendored mantranet_lib repo
-# backend/modules/module3_tampering/mantranet_lib/
+backend/modules/module3_tampering/mantranet_lib/
 
 # Debug scripts
 debug_fin_dl_ocr.py
