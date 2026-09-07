@@ -33,3 +33,23 @@ backend/uploads/
 
 # vendored mantranet_lib repo
 backend/modules/module3_tampering/mantranet_lib/
+
+# debug scripts
+E:\Projects\document-screening-system\debug_fin_dl_ocr.py
+E:\Projects\document-screening-system\debug_detected_mrz_region.jpg
+E:\Projects\document-screening-system\debug_ocr_pipeline.py
+E:\Projects\document-screening-system\diagnose_clean_false_positive.py
+E:\Projects\document-screening-system\ocr.py
+E:\Projects\document-screening-system\test_mod2_debug.py
+
+# docs
+E:\Projects\document-screening-system\docs
+
+# test
+E:\Projects\document-screening-system\tests
+
+# fixture create scripts
+ E:\Projects\document-screening-system\schema
+ E:\Projects\document-screening-system\data\generate_face_fixtures.py
+ E:\Projects\document-screening-system\data\generate_fixtures.py
+ E:\Projects\document-screening-system\data\generate_tampered_fixtures.py
