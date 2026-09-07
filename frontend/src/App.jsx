@@ -22,7 +22,6 @@ const API_URL = "http://127.0.0.1:8000";
 
 function App() {
   const [activeDocument, setActiveDocument] = useState("Passport");
-
   const [documentFile, setDocumentFile] = useState(null);
   const [selfieFile, setSelfieFile] = useState(null);
 
@@ -40,12 +39,17 @@ function App() {
     "Driving License",
   ];
 
+  // IMPORTANT: Backend-compatible document types
+  const docTypeMap = {
+    Passport: "passport",
+    Visa: "visa",
+    "National ID": "national_id",
+    "Driving License": "driving_license",
+  };
+
   const handleDocumentUpload = (event) => {
     const file = event.target.files?.[0];
-
-    if (!file) {
-      return;
-    }
+    if (!file) return;
 
     setDocumentFile(file);
     setAnalyzed(false);
@@ -82,7 +86,17 @@ function App() {
 
       formData.append("doc_image", documentFile);
       formData.append("live_selfie", selfieFile);
-      formData.append("doc_type", activeDocument);
+
+      // FIX: Send lowercase backend-compatible document type
+      formData.append(
+        "doc_type",
+        docTypeMap[activeDocument] || activeDocument.toLowerCase()
+      );
+
+      console.log(
+        "Sending doc_type:",
+        docTypeMap[activeDocument] || activeDocument.toLowerCase()
+      );
 
       const response = await fetch(`${API_URL}/screen`, {
         method: "POST",
@@ -94,7 +108,6 @@ function App() {
 
         try {
           const errorBody = await response.json();
-
           if (errorBody.detail) {
             message =
               typeof errorBody.detail === "string"
@@ -102,7 +115,7 @@ function App() {
                 : JSON.stringify(errorBody.detail);
           }
         } catch {
-          // Keep the default HTTP error message.
+          // Keep default error
         }
 
         throw new Error(message);
@@ -116,10 +129,8 @@ function App() {
       setAnalyzed(true);
     } catch (err) {
       console.error("Screening request failed:", err);
-
       setError(
-        err.message ||
-          "Unable to connect to the screening backend."
+        err.message || "Unable to connect to the screening backend."
       );
     } finally {
       setAnalyzing(false);
@@ -136,6 +147,7 @@ function App() {
     setShowCamera(false);
   };
 
+  // API results
   const ocr = result?.ocr;
   const validation = result?.validation;
   const tampering = result?.tampering;
@@ -144,52 +156,43 @@ function App() {
   const risk = result?.risk;
 
   const getFieldValue = (fieldName) => {
-    return (
-      ocr?.extracted_fields?.[fieldName]?.value ??
-      "—"
-    );
+    return ocr?.extracted_fields?.[fieldName]?.value ?? "—";
   };
 
-  const riskScore =
-    risk?.risk_score ??
-    risk?.score ??
-    null;
+  const riskScore = risk?.risk_score ?? null;
+  const riskBand = risk?.risk_band ?? null;
 
-  const riskBand =
-    risk?.risk_band ??
-    risk?.band ??
-    null;
-
-  const faceScore =
-    face?.similarity_score ??
-    face?.face_similarity ??
-    face?.score ??
-    null;
+  // API uses "similarity", not similarity_score
+  const faceScore = face?.similarity ?? null;
 
   const tamperFlag =
-    tampering?.overall_tamper_flag ??
-    tampering?.tamper_flag ??
-    false;
+    tampering?.overall_tamper_flag ?? false;
 
+  // FIX: Your backend does NOT return is_valid.
+  // Calculate validation from actual backend fields.
   const validationPassed =
-    validation?.is_valid ??
-    validation?.valid ??
-    null;
+    validation?.status === "success" &&
+    validation?.checksum_pass === true &&
+    validation?.text_mrz_match === true &&
+    validation?.expiry_valid === true &&
+    validation?.db_status === "clear";
 
+  // Authority API uses status, not authority_match/matched
   const authorityMatched =
-    authority?.authority_match ??
-    authority?.matched ??
-    null;
+    authority?.status === "match"
+      ? true
+      : authority?.status === "mismatch"
+        ? false
+        : null;
 
   return (
     <div className="app">
-      {/* HEADER */}
+
       <header className="topbar">
         <div>
           <h1>
             AI Based Fake Identity &amp; Document Screening System
           </h1>
-
           <p>
             Capture and verify identity documents before completing
             identity screening.
@@ -202,17 +205,13 @@ function App() {
             Activity log
           </button>
 
-          <button
-            className="scan-again"
-            onClick={handleReset}
-          >
+          <button className="scan-again" onClick={handleReset}>
             <RotateCcw size={16} />
             Scan again
           </button>
         </div>
       </header>
 
-      {/* PROGRESS */}
       <div className="progress">
         <div className="progress-step active">
           <span>01</span>
@@ -221,28 +220,19 @@ function App() {
 
         <div className="progress-line"></div>
 
-        <div
-          className={`progress-step ${
-            analyzed ? "active" : ""
-          }`}
-        >
+        <div className={`progress-step ${analyzed ? "active" : ""}`}>
           <span>02</span>
           IDENTITY CHECK
         </div>
 
         <div className="progress-line"></div>
 
-        <div
-          className={`progress-step ${
-            analyzed ? "active" : ""
-          }`}
-        >
+        <div className={`progress-step ${analyzed ? "active" : ""}`}>
           <span>03</span>
           DECISION
         </div>
       </div>
 
-      {/* ERROR */}
       {error && (
         <div className="error-banner">
           <XCircle size={18} />
@@ -250,10 +240,10 @@ function App() {
         </div>
       )}
 
-      {/* MAIN GRID */}
       <main className="main-grid">
-        {/* LEFT */}
+
         <section className="capture-card card">
+
           <div className="section-label">
             <span>01</span>
             DOCUMENT CAPTURE
@@ -262,9 +252,7 @@ function App() {
           <div className="card-heading">
             <div>
               <h2>Capture required documents</h2>
-              <p>
-                Choose a document type and upload a clear image.
-              </p>
+              <p>Choose a document type and upload a clear image.</p>
             </div>
 
             <span className="secure">
@@ -273,7 +261,6 @@ function App() {
             </span>
           </div>
 
-          {/* DOCUMENT TABS */}
           <div className="document-tabs">
             {documents.map((doc) => (
               <button
@@ -296,17 +283,14 @@ function App() {
             ))}
           </div>
 
-          {/* STATUS */}
           <div className="capture-status">
             <CheckCircle2 size={17} />
-
             <div>
               <strong>
                 {documentFile
                   ? documentFile.name
                   : "Document capture ready"}
               </strong>
-
               <span>
                 {documentFile
                   ? "Document image selected."
@@ -315,7 +299,6 @@ function App() {
             </div>
           </div>
 
-          {/* DOCUMENT PREVIEW */}
           <div className="document-preview">
             {showCamera ? (
               <CameraPanel
@@ -354,18 +337,6 @@ function App() {
                           <small>GIVEN NAME</small>
                           <b>PREVIEW</b>
                         </div>
-
-                        <div className="mini-row">
-                          <div>
-                            <small>DATE OF BIRTH</small>
-                            <b>—</b>
-                          </div>
-
-                          <div>
-                            <small>DOCUMENT NO.</small>
-                            <b>—</b>
-                          </div>
-                        </div>
                       </div>
                     </div>
 
@@ -384,7 +355,6 @@ function App() {
             )}
           </div>
 
-          {/* ACTION BUTTONS */}
           <div className="capture-actions">
             <button
               className="primary-btn"
@@ -397,7 +367,6 @@ function App() {
             <label className="secondary-btn">
               <Upload size={17} />
               Upload Image
-
               <input
                 type="file"
                 hidden
@@ -406,26 +375,18 @@ function App() {
               />
             </label>
 
-            <button
-              className="secondary-btn"
-              type="button"
-            >
+            <button className="secondary-btn" type="button">
               <ScanLine size={17} />
               Check NFC Chip
             </button>
           </div>
 
-          {/* FILE STATUS */}
           <div className="capture-status">
             <CheckCircle2 size={17} />
-
             <div>
               <strong>
-                {selfieFile
-                  ? "Selfie captured"
-                  : "Selfie required"}
+                {selfieFile ? "Selfie captured" : "Selfie required"}
               </strong>
-
               <span>
                 {selfieFile
                   ? "Live selfie is ready for face verification."
@@ -436,21 +397,20 @@ function App() {
 
           <p className="helper-text">
             <ShieldCheck size={14} />
-            Documents are processed securely. Sensitive data is
-            used only for verification.
+            Documents are processed securely.
           </p>
+
         </section>
 
-        {/* RIGHT */}
         <aside className="right-column">
-          {/* VERIFICATION */}
+
           <section className="card verification-card">
+
             <div className="card-top">
               <div>
                 <div className="section-label small-label">
                   VERIFICATION RESULT
                 </div>
-
                 <h2>Identity confidence</h2>
               </div>
 
@@ -468,7 +428,7 @@ function App() {
               <div className="confidence-circle">
                 <strong>
                   {faceScore !== null
-                    ? Math.round(Number(faceScore))
+                    ? Math.round(Number(faceScore) * 100)
                     : "—"}
                 </strong>
 
@@ -483,35 +443,33 @@ function App() {
                       ? "Identity screening complete"
                       : "Complete document set"}
                 </h3>
-
                 <p>
-                  {analyzing
-                    ? "The six-module screening pipeline is running."
-                    : analyzed
-                      ? "Verification signals have been analyzed."
-                      : "Upload a document and capture a selfie to start."}
+                  {analyzed
+                    ? "Verification signals have been analyzed."
+                    : "Upload a document and capture a selfie to start."}
                 </p>
               </div>
             </div>
 
             <div className="checks">
+
               <VerificationRow
                 icon={<FileCheck2 size={17} />}
                 title="Document Integrity"
                 subtitle="Format and structure validation"
                 status={
-                  validationPassed === true
-                    ? "PASS"
-                    : validationPassed === false
-                      ? "FAIL"
-                      : "—"
+                  !analyzed
+                    ? "—"
+                    : validationPassed
+                      ? "PASS"
+                      : "FAIL"
                 }
                 type={
-                  validationPassed === true
-                    ? "success"
-                    : validationPassed === false
-                      ? "warning"
-                      : "neutral"
+                  !analyzed
+                    ? "neutral"
+                    : validationPassed
+                      ? "success"
+                      : "warning"
                 }
               />
 
@@ -521,12 +479,16 @@ function App() {
                 subtitle="Extract document information"
                 status={
                   analyzed
-                    ? "COMPLETE"
+                    ? ocr?.status === "success"
+                      ? "COMPLETE"
+                      : "FAILED"
                     : "—"
                 }
                 type={
                   analyzed
-                    ? "success"
+                    ? ocr?.status === "success"
+                      ? "success"
+                      : "warning"
                     : "neutral"
                 }
               />
@@ -536,18 +498,18 @@ function App() {
                 title="MRZ Validation"
                 subtitle="Checksum and field consistency"
                 status={
-                  validationPassed === true
-                    ? "PASS"
-                    : validationPassed === false
-                      ? "REVIEW"
-                      : "—"
+                  !analyzed
+                    ? "—"
+                    : validation?.text_mrz_match
+                      ? "PASS"
+                      : "REVIEW"
                 }
                 type={
-                  validationPassed === true
-                    ? "success"
-                    : validationPassed === false
-                      ? "warning"
-                      : "neutral"
+                  !analyzed
+                    ? "neutral"
+                    : validation?.text_mrz_match
+                      ? "success"
+                      : "warning"
                 }
               />
 
@@ -576,14 +538,21 @@ function App() {
                 title="Face Verification"
                 subtitle="Document photo comparison"
                 status={
-                  faceScore !== null
-                    ? `${Math.round(Number(faceScore))}%`
-                    : "—"
+                  !analyzed
+                    ? "—"
+                    : face?.status === "match"
+                      ? "MATCH"
+                      : face?.status === "mismatch"
+                        ? "MISMATCH"
+                        : "NO FACE"
                 }
                 type={
-                  faceScore !== null
+                  face?.status === "match"
                     ? "success"
-                    : "neutral"
+                    : face?.status === "mismatch" ||
+                      face?.status === "no_face_detected"
+                      ? "warning"
+                      : "neutral"
                 }
               />
 
@@ -592,20 +561,23 @@ function App() {
                 title="Authority Reference"
                 subtitle="Trusted record comparison"
                 status={
-                  authorityMatched === true
+                  authority?.status === "match"
                     ? "MATCH"
-                    : authorityMatched === false
+                    : authority?.status === "mismatch"
                       ? "MISMATCH"
-                      : "—"
+                      : authority?.status === "not_available"
+                        ? "NOT AVAILABLE"
+                        : "—"
                 }
                 type={
-                  authorityMatched === true
+                  authority?.status === "match"
                     ? "success"
-                    : authorityMatched === false
+                    : authority?.status === "mismatch"
                       ? "warning"
                       : "neutral"
                 }
               />
+
             </div>
 
             {!analyzed && (
@@ -615,53 +587,44 @@ function App() {
                 disabled={analyzing}
               >
                 <ScanLine size={17} />
-
-                {analyzing
-                  ? "Analyzing..."
-                  : "Analyze document"}
+                {analyzing ? "Analyzing..." : "Analyze document"}
               </button>
             )}
+
           </section>
 
-          {/* TRUSTED RECORD */}
           <section className="card trusted-card">
+
             <div className="card-top">
               <div>
                 <div className="section-label small-label">
                   RECORD LOOKUP
                 </div>
-
                 <h2>Trusted record</h2>
               </div>
-
               <Database size={18} />
             </div>
 
             <div className="search-box">
               <Search size={16} />
-              <span>
-                Lookup identity after document screening
-              </span>
+              <span>Lookup identity after document screening</span>
             </div>
 
             <div className="record">
               <div className="avatar">
-                {getFieldValue("name")
-                  .split(" ")
-                  .map((part) => part[0])
-                  .join("")
-                  .slice(0, 2)
-                  .toUpperCase()}
+                {getFieldValue("name") !== "—"
+                  ? getFieldValue("name")
+                      .split(" ")
+                      .map((part) => part[0])
+                      .join("")
+                      .slice(0, 2)
+                  : "—"}
               </div>
 
               <div className="record-info">
-                <strong>
-                  {getFieldValue("name")}
-                </strong>
-
+                <strong>{getFieldValue("name")}</strong>
                 <span>
-                  Document:{" "}
-                  {getFieldValue("passport_number")}
+                  Document: {getFieldValue("passport_number")}
                 </span>
               </div>
 
@@ -673,51 +636,34 @@ function App() {
                     : "Pending validation"}
               </span>
             </div>
+
           </section>
+
         </aside>
       </main>
 
-      {/* BOTTOM INFORMATION */}
       <section className="bottom-grid">
+
         <div className="card extracted-card">
           <div className="section-label small-label">
             EXTRACTED INFORMATION
           </div>
 
           <div className="info-grid">
-            <Info
-              label="Full name"
-              value={getFieldValue("name")}
-            />
-
-            <Info
-              label="Nationality"
-              value={getFieldValue("nationality")}
-            />
-
-            <Info
-              label="Date of birth"
-              value={getFieldValue("dob")}
-            />
-
+            <Info label="Full name" value={getFieldValue("name")} />
+            <Info label="Nationality" value={getFieldValue("nationality")} />
+            <Info label="Date of birth" value={getFieldValue("dob")} />
             <Info
               label="Document number"
               value={getFieldValue("passport_number")}
             />
-
-            <Info
-              label="Expiry date"
-              value={getFieldValue("expiry")}
-            />
-
-            <Info
-              label="Document type"
-              value={activeDocument}
-            />
+            <Info label="Expiry date" value={getFieldValue("expiry")} />
+            <Info label="Document type" value={activeDocument} />
           </div>
         </div>
 
         <div className="card risk-card">
+
           <div className="section-label small-label">
             SCREENING DECISION
           </div>
@@ -725,13 +671,9 @@ function App() {
           <div className="risk-header">
             <div>
               <span>Risk score</span>
-
               <strong>
-                {riskScore !== null
-                  ? Math.round(Number(riskScore))
-                  : "—"}
+                {riskScore !== null ? riskScore : "—"}
               </strong>
-
               <small>/ 100</small>
             </div>
 
@@ -743,81 +685,65 @@ function App() {
               }
             >
               {riskBand
-                ? String(riskBand).toUpperCase()
+                ? String(riskBand).replace("_", " ").toUpperCase()
                 : "AWAITING ANALYSIS"}
             </span>
           </div>
 
           {analyzed ? (
             <div className="risk-reasons">
-              {tamperFlag ? (
-                <div>
+
+              <div>
+                {tamperFlag ? (
                   <AlertTriangle size={15} />
-                  Document tampering detected
-                </div>
-              ) : (
-                <div>
+                ) : (
                   <CheckCircle2 size={15} />
-                  No document tampering detected
-                </div>
-              )}
+                )}
+                {tamperFlag
+                  ? "Document tampering detected"
+                  : "No document tampering detected"}
+              </div>
 
-              {validationPassed === true ? (
-                <div>
+              <div>
+                {validationPassed ? (
                   <CheckCircle2 size={15} />
-                  Document validation passed
-                </div>
-              ) : (
+                ) : (
+                  <AlertTriangle size={15} />
+                )}
+                {validationPassed
+                  ? "Document validation passed"
+                  : "Document validation requires review"}
+              </div>
+
+              {face?.status === "no_face_detected" && (
                 <div>
                   <AlertTriangle size={15} />
-                  Document validation requires review
+                  No face detected in document
                 </div>
               )}
 
-              {faceScore !== null && (
-                <div>
-                  {Number(faceScore) >= 70 ? (
-                    <CheckCircle2 size={15} />
-                  ) : (
-                    <AlertTriangle size={15} />
-                  )}
-
-                  Face similarity:{" "}
-                  {Math.round(Number(faceScore))}%
-                </div>
-              )}
-
-              {authorityMatched === false && (
-                <div>
-                  <AlertTriangle size={15} />
-                  Authority reference mismatch
-                </div>
-              )}
             </div>
           ) : (
             <p className="empty-risk">
-              Complete document analysis to generate the
-              screening decision.
+              Complete document analysis to generate the screening decision.
             </p>
           )}
+
         </div>
       </section>
 
-      {/* FOOTER */}
       <footer>
         <div>
           <ShieldCheck size={15} />
-          AI-assisted screening • Final decision remains with
-          authorized officer
+          AI-assisted screening • Final decision remains with authorized officer
         </div>
 
         <div>
           <Clock3 size={14} />
-          {analyzing
-            ? "Screening in progress"
-            : "System ready"}
+          {analyzing ? "Screening in progress" : "System ready"}
         </div>
       </footer>
+
     </div>
   );
 }
@@ -841,14 +767,8 @@ function VerificationRow({
       </div>
 
       <span className={`check-status ${type}`}>
-        {type === "success" && (
-          <CheckCircle2 size={14} />
-        )}
-
-        {type === "warning" && (
-          <AlertTriangle size={14} />
-        )}
-
+        {type === "success" && <CheckCircle2 size={14} />}
+        {type === "warning" && <AlertTriangle size={14} />}
         {status}
       </span>
     </div>
