@@ -4,6 +4,7 @@ uvicorn[standard]==0.52.4
 pydantic==2.13.5
 
 # Module 1 - OCR
+pytesseract==0.3.13
 passporteye==2.2.2
 paddleocr==3.7.0
 easyocr==1.7.2
