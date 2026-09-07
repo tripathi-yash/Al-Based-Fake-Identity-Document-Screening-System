@@ -307,7 +307,7 @@ if __name__ == "__main__":
         os.path.dirname(__file__),
         "..", "..", "..",
         "data", "fixtures", "clean",
-        "clean_passport_01.jpg"
+        "clean_passport_02.jpg"
     )
 
     print("Debug : ", IMAGE_PATH)
@@ -316,8 +316,20 @@ if __name__ == "__main__":
         doc_bytes = file.read()
         
     ocr_result = run_ocr(doc_bytes, "passport")
-    print("Debug : ", ocr_result)
+    # print("Debug : ", ocr_result)
+    
+    print("Debug")
+    print("=" * 60)
+    print("MODULE 1 OUTPUT (live)")
+    print("=" * 60)
+    for key, value in ocr_result.items():
+        print(f"{key}: {value}")
 
     validation_result = run_validation(ocr_result, "passport")
 
-    print(validation_result) 
+    print("Debug")
+    print("=" * 60)
+    print("MODULE 2 OUTPUT (fed from live Module 1 result above)")
+    print("=" * 60)
+    for key, value in validation_result.items():
+        print(f"{key}: {value}")
