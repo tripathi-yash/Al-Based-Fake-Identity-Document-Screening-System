@@ -7,7 +7,6 @@ python-multipart==0.0.32
 # Module 1 - OCR
 pytesseract==0.3.13
 passporteye==2.2.2
-paddleocr==3.7.0
 easyocr==1.7.2
 
 # Computer vision / image processing
@@ -28,6 +27,8 @@ retina-face==0.0.18
 
 # Testing
 pytest==9.1.1
+
+
 # # Backend
 # fastapi==0.141.1
 # uvicorn[standard]==0.52.4
