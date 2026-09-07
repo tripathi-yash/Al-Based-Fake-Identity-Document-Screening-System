@@ -157,6 +157,44 @@ except Exception:  # pragma: no cover
 
 _MRZ_LINE_PATTERN = re.compile(r"^[A-Z0-9<]{20,44}$")
 
+# Confirmed bug (real fixtures): EasyOCR misreads digit '0' as letter
+# 'O' specifically right after "IND" in TD3 line 2 — e.g.
+# "IND0308153" -> "INDO308153" — breaking checksum math on genuinely
+# CLEAN documents whenever the DOB/expiry year starts with '0'.
+# Fixed here rather than in document_validation.py: this is an OCR
+# read error at the source, not a validation-logic problem, and
+# checksum.py's math is independently confirmed correct by hand.
+_OCR_DIGIT_CONFUSIONS = {
+    "O": "0",
+    "I": "1",
+    "L": "1",
+    "S": "5",
+    "B": "8",
+    "Z": "2",
+}
+
+# TD3 line 2 fixed-width positions that are numeric-only per ICAO 9303 —
+# safe to correct, unlike free-text zones (name, personal_number) where
+# a letter could be genuinely intended.
+_TD3_LINE2_NUMERIC_POSITIONS = [9] + list(range(13, 20)) + list(range(21, 28)) + [42, 43]
+
+
+def _fix_td3_line2_numeric_confusions(line2: str) -> str:
+    """Correct OCR letter/digit confusions ONLY at TD3 line 2's known
+    numeric-only positions (doc_number_check, dob+check, expiry+check,
+    personal_number_check, composite_check). Never touches doc_number,
+    nationality, sex, or personal_number zones, which can legitimately
+    contain letters."""
+    if not line2 or len(line2) != 44:
+        return line2
+
+    chars = list(line2)
+    for idx in _TD3_LINE2_NUMERIC_POSITIONS:
+        ch = chars[idx]
+        if ch in _OCR_DIGIT_CONFUSIONS:
+            chars[idx] = _OCR_DIGIT_CONFUSIONS[ch]
+    return "".join(chars)
+
 _DATE_FIELDS = {"dob", "expiry", "validity"}
 
 # Every pattern follows:
@@ -788,6 +826,19 @@ def extract_mrz(
                     re.sub(r"[^A-Z0-9<]", "", line.upper()) for line in raw_lines
                 ]
 
+                # PAD FIX: EasyOCR can drop a run of trailing '<' filler
+                # characters (confirmed — a genuine 44-char TD3 line came
+                # back as 36 chars with an OCR detection gap in the
+                # filler run). Trailing '<' carries no semantic content,
+                # so right-padding up to 44 is safe and loses nothing —
+                # unlike padding in the middle of a line, which would
+                # risk corrupting real data.
+                if mrz_format in ("TD3", "TD3_or_none"):
+                    candidate_lines = [
+                        line.ljust(44, "<") if 30 <= len(line) < 44 else line
+                        for line in candidate_lines
+                    ]
+
                 candidate_lines = [
                     line for line in candidate_lines if _MRZ_LINE_PATTERN.match(line)
                 ]
@@ -796,6 +847,11 @@ def extract_mrz(
                     candidate_lines = [
                         line[:44] for line in candidate_lines if len(line) >= 44
                     ]
+
+                # Fix confirmed OCR '0'/'O' confusion on line 2's numeric
+                # positions before checksum-sensitive parsing.
+                if mrz_format in ("TD3", "TD3_or_none") and len(candidate_lines) >= 2:
+                    candidate_lines[1] = _fix_td3_line2_numeric_confusions(candidate_lines[1])
 
                 print(f"DEBUG MRZ [localized crop]: raw_lines = {raw_lines}")
                 print(f"DEBUG MRZ [localized crop]: candidate_lines (post-filter) = {candidate_lines}")
@@ -820,6 +876,12 @@ def extract_mrz(
                     )
                 ]
 
+                if mrz_format in ("TD3", "TD3_or_none"):
+                    detected_lines = [
+                        line.ljust(44, "<") if 30 <= len(line) < 44 else line
+                        for line in detected_lines
+                    ]
+
                 detected_lines = [
                     line for line in detected_lines if _MRZ_LINE_PATTERN.match(line)
                 ]
@@ -828,6 +890,9 @@ def extract_mrz(
                     detected_lines = [
                         line[:44] for line in detected_lines if len(line) >= 44
                     ]
+
+                if mrz_format in ("TD3", "TD3_or_none") and len(detected_lines) >= 2:
+                    detected_lines[1] = _fix_td3_line2_numeric_confusions(detected_lines[1])
 
                 print(f"DEBUG MRZ [full-frame direct]: detected_lines (post-filter) = {detected_lines}")
 
@@ -869,6 +934,12 @@ def extract_mrz(
             re.sub(r"[^A-Z0-9<]", "", line.upper()) for line in raw_lines
         ]
 
+        if mrz_format in ("TD3", "TD3_or_none"):
+            candidate_lines = [
+                line.ljust(44, "<") if 30 <= len(line) < 44 else line
+                for line in candidate_lines
+            ]
+
         candidate_lines = [
             line for line in candidate_lines if _MRZ_LINE_PATTERN.match(line)
         ]
@@ -877,6 +948,9 @@ def extract_mrz(
             candidate_lines = [
                 line[:44] for line in candidate_lines if len(line) >= 44
             ]
+
+        if mrz_format in ("TD3", "TD3_or_none") and len(candidate_lines) >= 2:
+            candidate_lines[1] = _fix_td3_line2_numeric_confusions(candidate_lines[1])
 
         print(f"DEBUG MRZ [bottom-band]: raw_lines = {raw_lines}")
         print(f"DEBUG MRZ [bottom-band]: candidate_lines (post-filter) = {candidate_lines}")
@@ -1368,31 +1442,28 @@ def run_ocr(
 
         if image is None:
             return result
-
+        
         extracted = {}
+
         mrz_raw = None
+        generic_fields = extract_generic_fields(image, expected_fields)
 
         if mrz_format and str(mrz_format).lower() != "none":
-
             parsed_mrz, mrz_confidence = extract_mrz(image, mrz_format)
 
             if parsed_mrz is not None:
-
                 try:
                     mrz_raw = parsed_mrz.as_raw_dict()
                 except Exception:
                     mrz_raw = None
 
                 for field in expected_fields:
-
                     mrz_field = parsed_mrz.fields.get(field)
 
                     if mrz_field is not None and mrz_field.value:
-
                         value = mrz_field.value
 
                         if field in _DATE_FIELDS:
-
                             normalized = _normalize_date(value)
 
                             if normalized:
@@ -1400,18 +1471,27 @@ def run_ocr(
                             else:
                                 continue
 
+                        visual_field = generic_fields.get(field)
+
+                        if visual_field is not None:
+                            confidence = visual_field["confidence"]
+                        else:
+                            confidence = _safe_confidence(mrz_confidence)
+
                         extracted[field] = {
                             "value": value,
-                            "confidence": _safe_confidence(mrz_confidence),
+                            "confidence": _safe_confidence(confidence),
                         }
 
-        missing_fields = [field for field in expected_fields if field not in extracted]
+        missing_fields = [
+            field for field in expected_fields
+            if field not in extracted
+        ]
 
         if missing_fields:
-
-            generic_fields = extract_generic_fields(image, missing_fields)
-
-            extracted.update(generic_fields)
+            for field in missing_fields:
+                if field in generic_fields:
+                    extracted[field] = generic_fields[field]
 
         result["extracted_fields"] = extracted
 
